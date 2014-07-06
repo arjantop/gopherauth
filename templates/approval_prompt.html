@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+    <head></head>
+    <body>
+        <div id="scope-list">
+            <ul>
+                {{range .Scopes}}
+                <li class="scope">
+                    <span class="scope-description">{{.Description}}</span>
+                </li>
+                {{end}}
+            </ul>
+        </div>
+        <form method="POST">
+            <button>Cancel</button>
+            <button>Accept</button>
+        </form>
+    </body>
+</html>
