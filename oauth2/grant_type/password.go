@@ -1,16 +1,12 @@
 package grant_type
 
 import (
-	"encoding/base64"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"log"
 	"net/http"
-	"strings"
 
 	"github.com/arjantop/gopherauth/oauth2"
 	"github.com/arjantop/gopherauth/service"
+	"github.com/arjantop/gopherauth/util"
 )
 
 type PasswordController struct {
@@ -37,25 +33,8 @@ var InvalidClientError = oauth2.ErrorResponse{
 	nil,
 }
 
-func decodeAuthHeader(auth string) (*service.ClientCredentials, error) {
-	authParts := strings.SplitN(auth, " ", 2)
-	if len(authParts) != 2 || authParts[0] != "Basic" {
-		return nil, errors.New("Authorization method must be Basic")
-	}
-	decoded, err := base64.StdEncoding.DecodeString(authParts[1])
-	if err != nil {
-		return nil, err
-	}
-	clientCredentialsParts := strings.SplitN(string(decoded), ":", 2)
-	if len(clientCredentialsParts) != 2 || clientCredentialsParts[0] == "" || clientCredentialsParts[1] == "" {
-		return nil, errors.New("Invalid client credentials")
-	}
-	return &service.ClientCredentials{clientCredentialsParts[0], clientCredentialsParts[1]}, nil
-}
-
 func (c *PasswordController) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	auth := r.Header.Get("Authorization")
-	clientCredentials, err := decodeAuthHeader(auth)
+	clientCredentials, err := util.GetBasicAuth(r)
 	if err != nil {
 		InvalidClientError.WriteResponse(w, http.StatusUnauthorized)
 		return
@@ -81,11 +60,6 @@ func (c *PasswordController) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	jsonResponse, err := json.Marshal(response)
-	if err != nil {
-		log.Fatalf("Json marshal failed: %s", err)
-	}
 
-	w.Header().Set("Content-Type", "application/json;charset=UTF-8")
-	w.Write(jsonResponse)
+	response.WriteResponse(w, http.StatusOK)
 }

@@ -1,0 +1,67 @@
+package grant_type_test
+
+import (
+	"net/http/httptest"
+	"net/url"
+	"testing"
+
+	"github.com/arjantop/gopherauth/oauth2"
+	"github.com/arjantop/gopherauth/oauth2/grant_type"
+	"github.com/arjantop/gopherauth/service"
+	"github.com/arjantop/gopherauth/testutil"
+)
+
+const redirectUri = "https://domain.com/callback"
+
+func makeAuthCodeParameters() url.Values {
+	return map[string][]string{
+		"grant_type":   []string{"authentication_code"},
+		"code":         []string{"auth_code"},
+		"redirect_uri": []string{redirectUri},
+	}
+}
+
+type authCodeDeps struct {
+	oauth2Service *service.Oauth2ServiceMock
+	controller    *grant_type.AuthorizationCodeController
+	params        url.Values
+}
+
+func makeAuthCodeController() authCodeDeps {
+	oauth2Service := service.NewOauth2ServiceMock()
+	return authCodeDeps{
+		oauth2Service: oauth2Service,
+		controller:    grant_type.NewAuthorizationCodeController(oauth2Service),
+		params:        makeAuthCodeParameters(),
+	}
+}
+
+func TestAuthCodeMissingParemeterCode(t *testing.T) {
+	deps := makeAuthCodeController()
+	assertMissingParameter(t, deps.controller, deps.params, "code")
+}
+
+func TestAuthCodeMissingParameterRedirectUri(t *testing.T) {
+	deps := makeAuthCodeController()
+	assertMissingParameter(t, deps.controller, deps.params, "redirect_uri")
+}
+
+func TestAuthCodeRespondsReturnsBearerToken(t *testing.T) {
+	deps := makeAuthCodeController()
+
+	clientCredentials := service.ClientCredentials{"client_id", "client_secret"}
+	tokenResponse := oauth2.AccessTokenResponse{"token", "bearer", 3600}
+	deps.oauth2Service.On(
+		"AuthorizationCode",
+		&clientCredentials,
+		"auth_code",
+		redirectUri).Return(&tokenResponse, nil)
+
+	request := testutil.NewEndpointRequest(t, "POST", "token", deps.params)
+	request.SetBasicAuth("client_id", "client_secret")
+
+	recorder := httptest.NewRecorder()
+	deps.controller.ServeHTTP(recorder, request)
+
+	assertResponseValid(t, &tokenResponse, recorder)
+}

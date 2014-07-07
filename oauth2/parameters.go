@@ -7,8 +7,10 @@ const (
 	ParameterRedirectUri  = "redirect_uri"
 	ParameterScope        = "scope"
 	ParameterState        = "state"
+	ParameterCode         = "code"
 
 	ResponseTypeCode = "code"
 
-	GrantTypePassword = "password"
+	GrantTypePassword          = "password"
+	GrantTypeAuthorizationCode = "authorization_code"
 )
