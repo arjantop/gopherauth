@@ -74,7 +74,7 @@ func TestAuthTokenMissingClientCredentials(t *testing.T) {
 	assertMissingCredentialsError(t, deps.controller, deps.params)
 }
 
-func TestOauthServiceErrorResultsInServiceUnavaliable(t *testing.T) {
+func TestAuthCodeOauthServiceErrorResultsInServiceUnavaliableError(t *testing.T) {
 	deps := makeAuthCodeController()
 	clientCredentials := service.ClientCredentials{"client_id", "client_secret"}
 	errorResponse := errors.New("error")

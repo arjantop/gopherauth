@@ -8,6 +8,8 @@ const (
 	ParameterScope        = "scope"
 	ParameterState        = "state"
 	ParameterCode         = "code"
+	ParameterUsername     = "username"
+	ParameterPassword     = "password"
 
 	ResponseTypeCode = "code"
 

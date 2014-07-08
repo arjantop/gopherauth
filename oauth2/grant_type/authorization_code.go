@@ -25,11 +25,7 @@ func NewAuthorizationCodeController(
 func (c *AuthorizationCodeController) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	clientCredentials, err := util.GetBasicAuth(r)
 	if err != nil {
-		response := oauth2.ErrorResponse{
-			ErrorCode:   oauth2.ErrorInvalidClient,
-			Description: "Invalid client",
-			Uri:         nil,
-		}
+		response := helpers.NewMissingClientCredentialsError()
 		response.WriteResponse(w, http.StatusUnauthorized)
 		return
 	}

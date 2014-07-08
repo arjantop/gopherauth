@@ -1,10 +1,11 @@
 package grant_type
 
 import (
-	"fmt"
 	"net/http"
+	"net/url"
 
 	"github.com/arjantop/gopherauth/oauth2"
+	"github.com/arjantop/gopherauth/oauth2/helpers"
 	"github.com/arjantop/gopherauth/service"
 	"github.com/arjantop/gopherauth/util"
 )
@@ -19,35 +20,23 @@ func NewPasswordController(oauth2Service service.Oauth2Service) *PasswordControl
 	}
 }
 
-func NewMissingParameterError(param string) *oauth2.ErrorResponse {
-	return &oauth2.ErrorResponse{
-		oauth2.ErrorInvalidRequest,
-		fmt.Sprintf("Missing required parameter: %s", param),
-		nil,
-	}
-}
-
-var InvalidClientError = oauth2.ErrorResponse{
-	oauth2.ErrorInvalidClient,
-	"",
-	nil,
-}
-
 func (c *PasswordController) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	clientCredentials, err := util.GetBasicAuth(r)
 	if err != nil {
-		InvalidClientError.WriteResponse(w, http.StatusUnauthorized)
+		response := helpers.NewMissingClientCredentialsError()
+		response.WriteResponse(w, http.StatusUnauthorized)
 		return
 	}
 
-	username := r.PostFormValue("username")
-	if username == "" {
-		NewMissingParameterError("username").WriteResponse(w, http.StatusBadRequest)
-		return
-	}
-	password := r.PostFormValue("password")
-	if password == "" {
-		NewMissingParameterError("password").WriteResponse(w, http.StatusBadRequest)
+	username := r.PostFormValue(oauth2.ParameterUsername)
+	password := r.PostFormValue(oauth2.ParameterPassword)
+
+	params := url.Values{}
+	params.Add(oauth2.ParameterUsername, username)
+	params.Add(oauth2.ParameterPassword, password)
+
+	valid := helpers.ValidateParameters(params, w)
+	if !valid {
 		return
 	}
 
@@ -56,10 +45,9 @@ func (c *PasswordController) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if response, ok := err.(*oauth2.ErrorResponse); ok {
 			response.WriteResponse(w, http.StatusBadRequest)
 		} else {
-			http.Error(w, "", http.StatusInternalServerError)
+			http.Error(w, "", http.StatusServiceUnavailable)
 		}
 		return
 	}
-
 	response.WriteResponse(w, http.StatusOK)
 }

@@ -70,17 +70,7 @@ func TestPasswordFlowMissingParameterPassword(t *testing.T) {
 
 func TestPasswordFlowMissingClientCredentials(t *testing.T) {
 	deps := makePasswordController()
-	request := testutil.NewEndpointRequest(t, "POST", "token", deps.params)
-
-	recorder := httptest.NewRecorder()
-	deps.controller.ServeHTTP(recorder, request)
-
-	assert.Equal(t, http.StatusUnauthorized, recorder.Code)
-	testutil.AssertContentTypeJson(t, recorder)
-	var jsonMap map[string]interface{}
-	json.Unmarshal(recorder.Body.Bytes(), &jsonMap)
-	assert.Equal(t, 1, len(jsonMap))
-	assert.Equal(t, oauth2.ErrorInvalidClient, jsonMap["error"])
+	assertMissingCredentialsError(t, deps.controller, deps.params)
 }
 
 func TestOauthServiceResponseErrorIsReturned(t *testing.T) {
@@ -103,11 +93,14 @@ func TestOauthServiceResponseErrorIsReturned(t *testing.T) {
 	assert.Equal(t, oauth2.ErrorInvalidClient, jsonMap["error"])
 }
 
-func TestOauthServiceErrorCausesInternalServerError(t *testing.T) {
+func TestPasswordOauthServiceErrorResultsInServiceUnavaliableError(t *testing.T) {
 	deps := makePasswordController()
 	clientCredentials := service.ClientCredentials{"client_id", "client_secret"}
 	errorResponse := errors.New("some error")
-	deps.oauth2Service.On("PasswordFlow", &clientCredentials, "user", "pass").Return(nil, errorResponse)
+	deps.oauth2Service.On(
+		"PasswordFlow",
+		&clientCredentials,
+		"user", "pass").Return(nil, errorResponse)
 
 	request := testutil.NewEndpointRequest(t, "POST", "token", deps.params)
 	request.SetBasicAuth("client_id", "client_secret")
@@ -115,5 +108,5 @@ func TestOauthServiceErrorCausesInternalServerError(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	deps.controller.ServeHTTP(recorder, request)
 
-	assert.Equal(t, http.StatusInternalServerError, recorder.Code)
+	assert.Equal(t, http.StatusServiceUnavailable, recorder.Code)
 }

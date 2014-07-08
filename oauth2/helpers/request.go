@@ -8,7 +8,7 @@ import (
 func ValidateParameters(params url.Values, w http.ResponseWriter) bool {
 	for param, value := range params {
 		if value[0] == "" {
-			response := MakeMissingParameterError(param, nil)
+			response := NewMissingParameterError(param, nil)
 			response.WriteResponse(w, http.StatusBadRequest)
 			return false
 		}
