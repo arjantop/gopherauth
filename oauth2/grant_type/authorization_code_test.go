@@ -1,6 +1,8 @@
 package grant_type_test
 
 import (
+	"errors"
+	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"testing"
@@ -9,6 +11,7 @@ import (
 	"github.com/arjantop/gopherauth/oauth2/grant_type"
 	"github.com/arjantop/gopherauth/service"
 	"github.com/arjantop/gopherauth/testutil"
+	"github.com/stretchr/testify/assert"
 )
 
 const redirectUri = "https://domain.com/callback"
@@ -64,4 +67,28 @@ func TestAuthCodeRespondsReturnsBearerToken(t *testing.T) {
 	deps.controller.ServeHTTP(recorder, request)
 
 	assertResponseValid(t, &tokenResponse, recorder)
+}
+
+func TestAuthTokenMissingClientCredentials(t *testing.T) {
+	deps := makeAuthCodeController()
+	assertMissingCredentialsError(t, deps.controller, deps.params)
+}
+
+func TestOauthServiceErrorResultsInServiceUnavaliable(t *testing.T) {
+	deps := makeAuthCodeController()
+	clientCredentials := service.ClientCredentials{"client_id", "client_secret"}
+	errorResponse := errors.New("error")
+	deps.oauth2Service.On(
+		"AuthorizationCode",
+		&clientCredentials,
+		"auth_code",
+		redirectUri).Return(nil, errorResponse)
+
+	request := testutil.NewEndpointRequest(t, "POST", "token", deps.params)
+	request.SetBasicAuth("client_id", "client_secret")
+
+	recorder := httptest.NewRecorder()
+	deps.controller.ServeHTTP(recorder, request)
+
+	assert.Equal(t, http.StatusServiceUnavailable, recorder.Code)
 }

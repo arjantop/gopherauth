@@ -27,10 +27,11 @@ func (c *AuthorizationCodeController) ServeHTTP(w http.ResponseWriter, r *http.R
 	if err != nil {
 		response := oauth2.ErrorResponse{
 			ErrorCode:   oauth2.ErrorInvalidClient,
-			Description: "Invalid authorization",
+			Description: "Invalid client",
 			Uri:         nil,
 		}
 		response.WriteResponse(w, http.StatusUnauthorized)
+		return
 	}
 
 	code := r.PostFormValue(oauth2.ParameterCode)
@@ -47,6 +48,11 @@ func (c *AuthorizationCodeController) ServeHTTP(w http.ResponseWriter, r *http.R
 
 	response, err := c.oauth2Service.AuthorizationCode(clientCredentials, code, redirect_uri)
 	if err != nil {
+		if response, ok := err.(*oauth2.ErrorResponse); ok {
+			response.WriteResponse(w, http.StatusBadRequest)
+		} else {
+			http.Error(w, "", http.StatusServiceUnavailable)
+		}
 		return
 	}
 	response.WriteResponse(w, http.StatusOK)
