@@ -76,7 +76,8 @@ func TestPasswordFlowMissingClientCredentials(t *testing.T) {
 func TestOauthServiceResponseErrorIsReturned(t *testing.T) {
 	deps := makePasswordController()
 	clientCredentials := service.ClientCredentials{"client_id", "client_secret"}
-	errorResponse := oauth2.ErrorResponse{oauth2.ErrorInvalidClient, "", nil}
+	errorResponse := oauth2.ErrorResponse{
+		oauth2.ErrorInvalidClient, "Invalid client", nil}
 	deps.oauth2Service.On("PasswordFlow", &clientCredentials, "user", "pass").Return(nil, &errorResponse)
 
 	request := testutil.NewEndpointRequest(t, "POST", "token", deps.params)
@@ -87,10 +88,15 @@ func TestOauthServiceResponseErrorIsReturned(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, recorder.Code)
 	testutil.AssertContentTypeJson(t, recorder)
+
 	var jsonMap map[string]interface{}
 	json.Unmarshal(recorder.Body.Bytes(), &jsonMap)
-	assert.Equal(t, 1, len(jsonMap))
-	assert.Equal(t, oauth2.ErrorInvalidClient, jsonMap["error"])
+
+	assert.Equal(t, 2, len(jsonMap))
+	assert.Equal(t, oauth2.ErrorInvalidClient, jsonMap["error"],
+		"Error should be invalid client", recorder.Body.String())
+	assert.NotEmpty(t, jsonMap["error_description"],
+		"Error description should not be empty", recorder.Body.String())
 }
 
 func TestPasswordOauthServiceErrorResultsInServiceUnavaliableError(t *testing.T) {
