@@ -17,6 +17,9 @@ func (s *ScopeValidationResult) IsValid() bool {
 }
 
 type Oauth2Service interface {
-	PasswordFlow(c *ClientCredentials, username, password string) (*oauth2.AccessTokenResponse, error)
 	ValidateScope(scope []string) (*ScopeValidationResult, error)
+
+	PasswordFlow(c *ClientCredentials, username, password string) (*oauth2.AccessTokenResponse, error)
+
+	AuthorizationCode(c *ClientCredentials, code, redirect_uri string) (*oauth2.AccessTokenResponse, error)
 }

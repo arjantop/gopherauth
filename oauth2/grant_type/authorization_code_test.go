@@ -8,46 +8,58 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-
 	"github.com/arjantop/gopherauth/oauth2"
 	"github.com/arjantop/gopherauth/oauth2/grant_type"
 	"github.com/arjantop/gopherauth/service"
 	"github.com/arjantop/gopherauth/testutil"
+	"github.com/stretchr/testify/assert"
 )
 
-const (
-	serviceUrl = "https://example.com"
-)
+const redirectUri = "https://domain.com/callback"
 
-func makePasswordParameters() url.Values {
+func makeAuthCodeParameters() url.Values {
 	return map[string][]string{
-		"grant_type": []string{"password"},
-		"username":   []string{"user"},
-		"password":   []string{"pass"},
+		"grant_type":   []string{"authentication_code"},
+		"code":         []string{"auth_code"},
+		"redirect_uri": []string{redirectUri},
 	}
 }
 
-type passwordDeps struct {
+type authCodeDeps struct {
 	oauth2Service *service.Oauth2ServiceMock
-	controller    *grant_type.PasswordController
+	controller    *grant_type.AuthorizationCodeController
 	params        url.Values
 }
 
-func makePasswordController() passwordDeps {
+func makeAuthCodeController() authCodeDeps {
 	oauth2Service := service.NewOauth2ServiceMock()
-	return passwordDeps{
+	return authCodeDeps{
 		oauth2Service: oauth2Service,
-		controller:    grant_type.NewPasswordController(oauth2Service),
-		params:        makePasswordParameters(),
+		controller:    grant_type.NewAuthorizationCodeController(oauth2Service),
+		params:        makeAuthCodeParameters(),
 	}
 }
 
-func TestPasswordFlowReturnsBearerToken(t *testing.T) {
-	deps := makePasswordController()
+func TestAuthCodeMissingParemeterCode(t *testing.T) {
+	deps := makeAuthCodeController()
+	assertMissingParameter(t, deps.controller, deps.params, "code")
+}
+
+func TestAuthCodeMissingParameterRedirectUri(t *testing.T) {
+	deps := makeAuthCodeController()
+	assertMissingParameter(t, deps.controller, deps.params, "redirect_uri")
+}
+
+func TestAuthCodeRespondsReturnsBearerToken(t *testing.T) {
+	deps := makeAuthCodeController()
+
 	clientCredentials := service.ClientCredentials{"client_id", "client_secret"}
 	tokenResponse := oauth2.AccessTokenResponse{"token", "bearer", 3600}
-	deps.oauth2Service.On("PasswordFlow", &clientCredentials, "user", "pass").Return(&tokenResponse, nil)
+	deps.oauth2Service.On(
+		"AuthorizationCode",
+		&clientCredentials,
+		"auth_code",
+		redirectUri).Return(&tokenResponse, nil)
 
 	request := testutil.NewEndpointRequest(t, "POST", "token", deps.params)
 	request.SetBasicAuth("client_id", "client_secret")
@@ -58,27 +70,22 @@ func TestPasswordFlowReturnsBearerToken(t *testing.T) {
 	assertResponseValid(t, &tokenResponse, recorder)
 }
 
-func TestPasswordFlowMissingParameterUsername(t *testing.T) {
-	deps := makePasswordController()
-	assertMissingParameter(t, deps.controller, deps.params, "username")
-}
-
-func TestPasswordFlowMissingParameterPassword(t *testing.T) {
-	deps := makePasswordController()
-	assertMissingParameter(t, deps.controller, deps.params, "password")
-}
-
-func TestPasswordFlowMissingClientCredentials(t *testing.T) {
-	deps := makePasswordController()
+func TestAuthTokenMissingClientCredentials(t *testing.T) {
+	deps := makeAuthCodeController()
 	assertMissingCredentialsError(t, deps.controller, deps.params)
 }
 
-func TestOauthServiceResponseErrorIsReturned(t *testing.T) {
-	deps := makePasswordController()
+func TestAuthCodeOauth2ServiceStandardErrorIsDisplayed(t *testing.T) {
+	deps := makeAuthCodeController()
+
 	clientCredentials := service.ClientCredentials{"client_id", "client_secret"}
 	errorResponse := oauth2.ErrorResponse{
-		oauth2.ErrorInvalidClient, "Invalid client", nil}
-	deps.oauth2Service.On("PasswordFlow", &clientCredentials, "user", "pass").Return(nil, &errorResponse)
+		oauth2.ErrorUnauthorizedClient, "Unauthorized client", nil}
+	deps.oauth2Service.On(
+		"AuthorizationCode",
+		&clientCredentials,
+		"auth_code",
+		redirectUri).Return(nil, &errorResponse)
 
 	request := testutil.NewEndpointRequest(t, "POST", "token", deps.params)
 	request.SetBasicAuth("client_id", "client_secret")
@@ -93,20 +100,21 @@ func TestOauthServiceResponseErrorIsReturned(t *testing.T) {
 	json.Unmarshal(recorder.Body.Bytes(), &jsonMap)
 
 	assert.Equal(t, 2, len(jsonMap))
-	assert.Equal(t, oauth2.ErrorInvalidClient, jsonMap["error"],
-		"Error should be invalid client", recorder.Body.String())
+	assert.Equal(t, oauth2.ErrorUnauthorizedClient, jsonMap["error"],
+		"Error should be unuthorized client", recorder.Body.String())
 	assert.NotEmpty(t, jsonMap["error_description"],
 		"Error description should not be empty", recorder.Body.String())
 }
 
-func TestPasswordOauthServiceErrorResultsInServiceUnavaliableError(t *testing.T) {
-	deps := makePasswordController()
+func TestAuthCodeOauthServiceErrorResultsInServiceUnavaliableError(t *testing.T) {
+	deps := makeAuthCodeController()
 	clientCredentials := service.ClientCredentials{"client_id", "client_secret"}
-	errorResponse := errors.New("some error")
+	errorResponse := errors.New("error")
 	deps.oauth2Service.On(
-		"PasswordFlow",
+		"AuthorizationCode",
 		&clientCredentials,
-		"user", "pass").Return(nil, errorResponse)
+		"auth_code",
+		redirectUri).Return(nil, errorResponse)
 
 	request := testutil.NewEndpointRequest(t, "POST", "token", deps.params)
 	request.SetBasicAuth("client_id", "client_secret")

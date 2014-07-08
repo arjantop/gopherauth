@@ -29,6 +29,18 @@ type AccessTokenResponse struct {
 	ExpiresIn   uint   `json:"expires_in"`
 }
 
+func (r *AccessTokenResponse) WriteResponse(w http.ResponseWriter, code int) bool {
+	w.Header().Set("Content-Type", "application/json;charset=UTF-8")
+	jsonValue, err := json.Marshal(r)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return false
+	}
+	w.WriteHeader(code)
+	w.Write(jsonValue)
+	return true
+}
+
 type ErrorResponse struct {
 	ErrorCode   string   `json:"error"`
 	Description string   `json:"error_description,omitempty"`

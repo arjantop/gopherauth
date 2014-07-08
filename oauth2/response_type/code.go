@@ -51,7 +51,7 @@ func (c *CodeController) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	params.Add(oauth2.ParameterScope, scopeString)
 	for param, val := range params {
 		if val[0] == "" {
-			response := helpers.MakeMissingParameterError(param, nil)
+			response := helpers.NewMissingParameterError(param, nil)
 			helpers.RenderError(w, c.templateFactory, response)
 			return
 		}
