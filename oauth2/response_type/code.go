@@ -30,11 +30,13 @@ func NewCodeController(
 	userAuthService service.UserAuthenticationService,
 	oauth2Service service.Oauth2Service,
 	templateFactory *util.TemplateFactory) *CodeController {
+
 	return &CodeController{
 		loginUrl:        loginUrl,
 		userAuthService: userAuthService,
 		oauth2Service:   oauth2Service,
-		templateFactory: templateFactory}
+		templateFactory: templateFactory,
+	}
 }
 
 func (c *CodeController) ServeHTTP(w http.ResponseWriter, r *http.Request) {
