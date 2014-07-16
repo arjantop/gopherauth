@@ -25,7 +25,7 @@ func makeTokenController() tokenDeps {
 
 func makeTokenRequestParameters() url.Values {
 	return map[string][]string{
-		"response_type": []string{"code"},
+		"response_type": []string{"token"},
 		"client_id":     []string{"client_id"},
 		"redirect_uri":  []string{"https://example.com/callback"},
 		"scope":         []string{"scope1 scope2"},
