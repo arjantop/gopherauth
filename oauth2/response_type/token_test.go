@@ -10,20 +10,20 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-type deps struct {
+type tokenDeps struct {
 	params     url.Values
-	controller *response_type.CodeController
+	controller *response_type.TokenController
 }
 
-func makeAuthCodeController() deps {
+func makeTokenController() tokenDeps {
 	params := makeAuthCodeRequestParameters()
-	return deps{
+	return tokenDeps{
 		params:     params,
-		controller: response_type.NewCodeController(),
+		controller: response_type.NewTokenController(),
 	}
 }
 
-func makeAuthCodeRequestParameters() url.Values {
+func makeTokenRequestParameters() url.Values {
 	return map[string][]string{
 		"response_type": []string{"code"},
 		"client_id":     []string{"client_id"},
@@ -33,8 +33,8 @@ func makeAuthCodeRequestParameters() url.Values {
 	}
 }
 
-func TestAuthCodeParametersAreExtracted(t *testing.T) {
-	deps := makeAuthCodeController()
+func TestTokenParametersAreExtracted(t *testing.T) {
+	deps := makeTokenController()
 
 	request := testutil.NewEndpointRequest(t, "GET", "auth", deps.params)
 	params := deps.controller.ExtractParameters(request)

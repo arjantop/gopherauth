@@ -1,6 +1,7 @@
 package endpoint_test
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -8,54 +9,292 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/arjantop/gopherauth/oauth2/endpoint"
+	"github.com/arjantop/gopherauth/service"
+	"github.com/arjantop/gopherauth/testutil"
 	"github.com/arjantop/gopherauth/util"
 )
 
 const (
-	serviceUrl      = "https://example.com"
 	contentTypeHtml = "text/html; charset=utf-8"
-	endpointUrl     = serviceUrl + "/auth"
-	templatesRoot   = "../../templates"
+	templateRoot    = "../../templates"
+	loginUrl        = "https://example.com/login"
 )
+
+func makeLoginUrl() *url.URL {
+	url, _ := url.Parse(loginUrl)
+	return url
+}
+
+type ResponseTypeMock struct {
+	mock.Mock
+}
+
+func (m *ResponseTypeMock) ExtractParameters(r *http.Request) url.Values {
+	args := m.Mock.Called(r)
+	params, _ := args.Get(0).(url.Values)
+	return params
+}
+
+func NewResponseTypeMock() *ResponseTypeMock {
+	return &ResponseTypeMock{}
+}
+
+type authDeps struct {
+	responseTypes   map[string]*ResponseTypeMock
+	handler         http.Handler
+	oauth2Service   *service.Oauth2ServiceMock
+	userAuthService *service.UserAuthenticationServiceMock
+	templateFactory *util.TemplateFactory
+}
+
+func makeAuthEndpointHandler() authDeps {
+	type1 := NewResponseTypeMock()
+	type2 := NewResponseTypeMock()
+	responseTypes := map[string]*ResponseTypeMock{
+		"type1": type1,
+		"type2": type2,
+	}
+	oauth2Service := service.NewOauth2ServiceMock()
+	userAuthService := service.NewUserAuthenticationServiceMock()
+	handler := endpoint.NewAuthEndpointHandler(
+		makeLoginUrl(),
+		oauth2Service,
+		userAuthService,
+		util.NewTemplateFactory(templateRoot),
+		map[string]endpoint.ResponseType{
+			"type1": type1,
+			"type2": type2,
+		})
+	return authDeps{
+		responseTypes:   responseTypes,
+		handler:         handler,
+		oauth2Service:   oauth2Service,
+		userAuthService: userAuthService,
+	}
+}
 
 func TestAuthEndpointIsDefinedOnlyForGetHttpMethod(t *testing.T) {
 	httpMethods := []string{"POST", "HEAD", "PUT", "DELETE",
 		"TRACE", "OPTIONS", "CONNECT", "PATCH"}
 	for _, method := range httpMethods {
-		endpoint := endpoint.NewAuthEndpointHandler(nil, nil)
+		deps := makeAuthEndpointHandler()
 
-		request, err := http.NewRequest(method, endpointUrl, nil)
+		request, err := http.NewRequest(method, "", nil)
 		assert.Nil(t, err)
 
 		recorder := httptest.NewRecorder()
-		endpoint.ServeHTTP(recorder, request)
+		deps.handler.ServeHTTP(recorder, request)
 
 		assert.Equal(t, http.StatusMethodNotAllowed, recorder.Code,
 			fmt.Sprintf("Auth endpoint should not be defined for %s", method))
 	}
 }
 
-func TestResponseTypeCodeRequestIsDelegatedToCorrectController(t *testing.T) {
-	var ctrlCalled bool
-	authCodeGrantCtrl := func(w http.ResponseWriter, r *http.Request) {
-		if ctrlCalled {
-			assert.Fail(t, "Controller must only be called once")
-		}
-		ctrlCalled = true
+func TestAuthEndpointCorrectResponseTypeControllerIsUsedForParameterParsing(t *testing.T) {
+	deps := makeAuthEndpointHandler()
+
+	for responseType, handler := range deps.responseTypes {
+		params := url.Values{}
+		params.Add("response_type", responseType)
+		request := testutil.NewEndpointRequest(t, "GET", "auth", params)
+		handler.On("ExtractParameters", request).Return(params)
+		deps.oauth2Service.On("ValidateScope", []string{}).Return(&service.ScopeValidationResult{}, nil)
+
+		recorder := httptest.NewRecorder()
+		deps.handler.ServeHTTP(recorder, request)
+		assertAuthEndpointExpectations(t, deps)
 	}
-	endpoint := endpoint.NewAuthEndpointHandler(http.HandlerFunc(authCodeGrantCtrl), nil)
+}
+
+func TestAuthEndpointErrorIsDisplayedIfParsedParameterIsEmpty(t *testing.T) {
+	deps := makeAuthEndpointHandler()
 
 	params := url.Values{}
-	params.Add("response_type", "code")
-	request, err := http.NewRequest("GET", endpointUrl+"?"+params.Encode(), nil)
-	assert.Nil(t, err)
+	params.Add("response_type", "type1")
+	params.Add("param1", "value1")
+	request := testutil.NewEndpointRequest(t, "GET", "auth", params)
+	params.Add("param2", "")
+	deps.responseTypes["type1"].On("ExtractParameters", request).Return(params)
 
 	recorder := httptest.NewRecorder()
-	endpoint.ServeHTTP(recorder, request)
+	deps.handler.ServeHTTP(recorder, request)
 
-	assert.True(t, ctrlCalled, "Auth Code Grant controlled should be called")
+	assertIsBadRequest(t, recorder)
+	assert.Contains(t, recorder.Body.String(), "invalid_request", "HTML output should contain error name")
+	assert.Contains(t, recorder.Body.String(), "param2",
+		fmt.Sprintf("HTML output should contain parameter name: param2"))
+	assertAuthEndpointExpectations(t, deps)
+}
+
+func TestErrorIsDisplayedIfResponseTypeIsInvalid(t *testing.T) {
+	deps := makeAuthEndpointHandler()
+
+	params := url.Values{}
+	params.Add("response_type", "invalid")
+	request := testutil.NewEndpointRequest(t, "GET", "auth", params)
+
+	recorder := httptest.NewRecorder()
+	deps.handler.ServeHTTP(recorder, request)
+
+	assertIsBadRequest(t, recorder)
+	assert.Contains(t, recorder.Body.String(), "response_type")
+}
+
+func TestErrorIsDisplayedIfResponseTypeIsMissing(t *testing.T) {
+	deps := makeAuthEndpointHandler()
+
+	params := url.Values{}
+	request := testutil.NewEndpointRequest(t, "GET", "auth", params)
+
+	recorder := httptest.NewRecorder()
+	deps.handler.ServeHTTP(recorder, request)
+
+	assertIsBadRequest(t, recorder)
+	assert.Contains(t, recorder.Body.String(), "missing")
+	assert.Contains(t, recorder.Body.String(), "response_type")
+}
+
+func TestErrorIsDisaplyedIfOauth2ServiceErrorOccurs(t *testing.T) {
+	deps := makeAuthEndpointHandler()
+
+	params := url.Values{}
+	params.Add("response_type", "type1")
+	request := testutil.NewEndpointRequest(t, "GET", "auth", params)
+
+	deps.responseTypes["type1"].On("ExtractParameters", request).Return(params)
+	deps.oauth2Service.On("ValidateScope", []string{}).Return(nil, errors.New("error"))
+
+	recorder := httptest.NewRecorder()
+	deps.handler.ServeHTTP(recorder, request)
+
+	assert.Equal(t, http.StatusServiceUnavailable, recorder.Code)
+
+	assertAuthEndpointExpectations(t, deps)
+}
+
+func TestErrorisDisplayedIfScomeScopesAreInvalid(t *testing.T) {
+	deps := makeAuthEndpointHandler()
+
+	params := url.Values{}
+	params.Add("response_type", "type2")
+	params.Add("scope", "scope1 scope2")
+	request := testutil.NewEndpointRequest(t, "GET", "auth", params)
+
+	deps.responseTypes["type2"].On("ExtractParameters", request).Return(params)
+	deps.oauth2Service.On("ValidateScope", []string{"scope1", "scope2"}).Return(
+		&service.ScopeValidationResult{Valid: []string{"scope2"}, Invalid: []string{"scope1"}}, nil)
+
+	recorder := httptest.NewRecorder()
+	deps.handler.ServeHTTP(recorder, request)
+
+	assertIsBadRequest(t, recorder)
+	//TODO display invalid scopes
+	assert.Contains(t, recorder.Body.String(), "invalid_scope")
+
+	assertAuthEndpointExpectations(t, deps)
+}
+
+func TestUserIsRedirectedToLoginIfSessionCookieIsNotFound(t *testing.T) {
+	deps := makeAuthEndpointHandler()
+
+	params := url.Values{}
+	params.Add("response_type", "type2")
+	request := testutil.NewEndpointRequest(t, "GET", "auth", params)
+
+	deps.responseTypes["type2"].On("ExtractParameters", request).Return(params)
+	deps.oauth2Service.On("ValidateScope", []string{}).Return(&service.ScopeValidationResult{}, nil)
+
+	recorder := httptest.NewRecorder()
+	deps.handler.ServeHTTP(recorder, request)
+
+	assertIsRedirectedToLogin(t, recorder, &params)
+	assertAuthEndpointExpectations(t, deps)
+}
+
+func TestUserIsRedirectedToLoginIfSessionValueIsInvalid(t *testing.T) {
+	deps := makeAuthEndpointHandler()
+
+	params := url.Values{}
+	params.Add("response_type", "type2")
+	request := testutil.NewEndpointRequest(t, "GET", "auth", params)
+	sessionIdCookie := &http.Cookie{Name: "sessionid", Value: "invalid_id"}
+	request.AddCookie(sessionIdCookie)
+
+	deps.responseTypes["type2"].On("ExtractParameters", request).Return(params)
+	deps.oauth2Service.On("ValidateScope", []string{}).Return(&service.ScopeValidationResult{}, nil)
+	deps.userAuthService.On("IsSessionValid", "invalid_id").Return(false, nil)
+
+	recorder := httptest.NewRecorder()
+	deps.handler.ServeHTTP(recorder, request)
+
+	assertIsRedirectedToLogin(t, recorder, &params)
+	assertAuthEndpointExpectations(t, deps)
+}
+
+func TestErrorIsDisaplyedIfUserAuthServiceErrorOccurs(t *testing.T) {
+	deps := makeAuthEndpointHandler()
+
+	params := url.Values{}
+	params.Add("response_type", "type1")
+	request := testutil.NewEndpointRequest(t, "GET", "auth", params)
+	sessionIdCookie := &http.Cookie{Name: "sessionid", Value: "valid_id"}
+	request.AddCookie(sessionIdCookie)
+
+	deps.responseTypes["type1"].On("ExtractParameters", request).Return(params)
+	deps.oauth2Service.On("ValidateScope", []string{}).Return(&service.ScopeValidationResult{}, nil)
+	deps.userAuthService.On("IsSessionValid", "valid_id").Return(false, errors.New("error"))
+
+	recorder := httptest.NewRecorder()
+	deps.handler.ServeHTTP(recorder, request)
+
+	assert.Equal(t, http.StatusServiceUnavailable, recorder.Code)
+	assertAuthEndpointExpectations(t, deps)
+}
+
+func TestAuthenticatedUserIsPresentedWithApprovalPrompt(t *testing.T) {
+	deps := makeAuthEndpointHandler()
+
+	params := url.Values{}
+	params.Add("response_type", "type2")
+	request := testutil.NewEndpointRequest(t, "GET", "auth", params)
+	sessionIdCookie := &http.Cookie{Name: "sessionid", Value: "valid_id"}
+	request.AddCookie(sessionIdCookie)
+
+	deps.responseTypes["type2"].On("ExtractParameters", request).Return(params)
+	deps.oauth2Service.On("ValidateScope", []string{}).Return(&service.ScopeValidationResult{}, nil)
+	deps.userAuthService.On("IsSessionValid", "valid_id").Return(true, nil)
+
+	recorder := httptest.NewRecorder()
+	deps.handler.ServeHTTP(recorder, request)
+
+	//TODO incomplete implementation
+	assert.Equal(t, http.StatusOK, recorder.Code, "Response code should be 200 OK")
+	assert.Equal(t, contentTypeHtml, recorder.Header().Get("Content-Type"), "Response type should be html")
+	assertAuthEndpointExpectations(t, deps)
+}
+
+func TestNoCacheHeadersAreSet(t *testing.T) {
+	deps := makeAuthEndpointHandler()
+
+	params := url.Values{}
+	request := testutil.NewEndpointRequest(t, "GET", "auth", params)
+
+	recorder := httptest.NewRecorder()
+	deps.handler.ServeHTTP(recorder, request)
+
+	assert.Equal(t, recorder.Header().Get("Cache-Control"), "no-store", "Cache-Control header should be set")
+	assert.Equal(t, recorder.Header().Get("Pragma"), "no-cache", "Pragma header should be set")
+}
+
+func assertAuthEndpointExpectations(t *testing.T, deps authDeps) {
+	deps.oauth2Service.Mock.AssertExpectations(t)
+	deps.userAuthService.Mock.AssertExpectations(t)
+	for _, handler := range deps.responseTypes {
+		handler.Mock.AssertExpectations(t)
+	}
 }
 
 func assertIsBadRequest(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -63,42 +302,8 @@ func assertIsBadRequest(t *testing.T, recorder *httptest.ResponseRecorder) {
 	assert.Equal(t, contentTypeHtml, recorder.Header().Get("Content-Type"), "Response type should be html")
 }
 
-func TestErrorIsDisplayedIfResponseTypeIsMissing(t *testing.T) {
-	endpoint := endpoint.NewAuthEndpointHandler(nil, util.NewTemplateFactory(templatesRoot))
-
-	params := url.Values{}
-	request, err := http.NewRequest("GET", endpointUrl+"?"+params.Encode(), nil)
-	assert.Nil(t, err)
-
-	recorder := httptest.NewRecorder()
-	endpoint.ServeHTTP(recorder, request)
-
-	assertIsBadRequest(t, recorder)
-}
-
-func TestErrorIsDisplayedIfResponseTypeIsNotSupported(t *testing.T) {
-	endpoint := endpoint.NewAuthEndpointHandler(nil, util.NewTemplateFactory(templatesRoot))
-
-	params := url.Values{}
-	params.Add("response_type", "unsupported")
-	request, err := http.NewRequest("GET", endpointUrl+"?"+params.Encode(), nil)
-	assert.Nil(t, err)
-
-	recorder := httptest.NewRecorder()
-	endpoint.ServeHTTP(recorder, request)
-
-	assertIsBadRequest(t, recorder)
-}
-
-func TestNoCacheHeadersAreSet(t *testing.T) {
-	endpoint := endpoint.NewAuthEndpointHandler(nil, util.NewTemplateFactory(templatesRoot))
-
-	request, err := http.NewRequest("GET", endpointUrl, nil)
-	assert.Nil(t, err)
-
-	recorder := httptest.NewRecorder()
-	endpoint.ServeHTTP(recorder, request)
-
-	assert.Equal(t, recorder.Header().Get("Cache-Control"), "no-store", "Cache-Control header should be set")
-	assert.Equal(t, recorder.Header().Get("Pragma"), "no-cache", "Pragma header should be set")
+func assertIsRedirectedToLogin(t *testing.T, recorder *httptest.ResponseRecorder, params *url.Values) {
+	assert.Equal(t, http.StatusFound, recorder.Code, "Response code should be 302 Found")
+	assert.Equal(t, loginUrl+"?parameters="+url.QueryEscape(params.Encode()),
+		recorder.Header().Get("Location"))
 }
