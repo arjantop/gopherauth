@@ -11,7 +11,8 @@ const (
 	ParameterUsername     = "username"
 	ParameterPassword     = "password"
 
-	ResponseTypeCode = "code"
+	ResponseTypeCode  = "code"
+	ResponseTypeToken = "token"
 
 	GrantTypePassword          = "password"
 	GrantTypeAuthorizationCode = "authorization_code"
