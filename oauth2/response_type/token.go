@@ -15,3 +15,7 @@ func NewTokenController() *TokenController {
 func (c *TokenController) ExtractParameters(r *http.Request) url.Values {
 	return extractParameters(r)
 }
+
+func (c *TokenController) Execute(params url.Values) url.URL {
+	return url.URL{}
+}

@@ -25,5 +25,8 @@ func main() {
 		responseTypeHandlers)
 	http.Handle("/auth", authEndpointController)
 
+	approvalHandler := endpoint.NewApprovalEndpointHandler(nil, nil, nil, nil)
+	http.Handle("/approval", approvalHandler)
+
 	http.ListenAndServe(":8080", nil)
 }

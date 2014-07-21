@@ -20,11 +20,11 @@ import (
 const (
 	contentTypeHtml = "text/html; charset=utf-8"
 	templateRoot    = "../../templates"
-	loginUrl        = "https://example.com/login"
+	LoginUrl        = "https://example.com/login"
 )
 
 func makeLoginUrl() *url.URL {
-	url, _ := url.Parse(loginUrl)
+	url, _ := url.Parse(LoginUrl)
 	return url
 }
 
@@ -36,6 +36,15 @@ func (m *ResponseTypeMock) ExtractParameters(r *http.Request) url.Values {
 	args := m.Mock.Called(r)
 	params, _ := args.Get(0).(url.Values)
 	return params
+}
+
+func (m *ResponseTypeMock) Execute(params url.Values) url.URL {
+	args := m.Mock.Called(params)
+	url, ok := args.Get(0).(url.URL)
+	if !ok {
+		panic("Return value is not of yupe net.URL")
+	}
+	return url
 }
 
 func NewResponseTypeMock() *ResponseTypeMock {
@@ -210,7 +219,7 @@ func TestUserIsRedirectedToLoginIfSessionCookieIsNotFound(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	deps.handler.ServeHTTP(recorder, request)
 
-	assertIsRedirectedToLogin(t, recorder, &params)
+	AssertIsRedirectedToLogin(t, recorder, &params)
 	assertAuthEndpointExpectations(t, deps)
 }
 
@@ -230,7 +239,7 @@ func TestUserIsRedirectedToLoginIfSessionValueIsInvalid(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	deps.handler.ServeHTTP(recorder, request)
 
-	assertIsRedirectedToLogin(t, recorder, &params)
+	AssertIsRedirectedToLogin(t, recorder, &params)
 	assertAuthEndpointExpectations(t, deps)
 }
 
@@ -302,8 +311,8 @@ func assertIsBadRequest(t *testing.T, recorder *httptest.ResponseRecorder) {
 	assert.Equal(t, contentTypeHtml, recorder.Header().Get("Content-Type"), "Response type should be html")
 }
 
-func assertIsRedirectedToLogin(t *testing.T, recorder *httptest.ResponseRecorder, params *url.Values) {
+func AssertIsRedirectedToLogin(t *testing.T, recorder *httptest.ResponseRecorder, params *url.Values) {
 	assert.Equal(t, http.StatusFound, recorder.Code, "Response code should be 302 Found")
-	assert.Equal(t, loginUrl+"?parameters="+url.QueryEscape(params.Encode()),
+	assert.Equal(t, LoginUrl+"?parameters="+url.QueryEscape(params.Encode()),
 		recorder.Header().Get("Location"))
 }

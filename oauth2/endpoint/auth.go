@@ -21,6 +21,7 @@ type ApprovalPrompt struct {
 
 type ResponseType interface {
 	ExtractParameters(r *http.Request) url.Values
+	Execute(params url.Values) url.URL
 }
 
 type authEndpointHandler struct {
