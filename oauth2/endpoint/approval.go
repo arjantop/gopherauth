@@ -11,7 +11,6 @@ import (
 
 	"github.com/arjantop/gopherauth/oauth2"
 	"github.com/arjantop/gopherauth/service"
-	"github.com/arjantop/gopherauth/util"
 )
 
 const (
@@ -52,18 +51,25 @@ func (h *approvalEndpointHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 		params := handler.ExtractParameters(r)
 		params.Add(oauth2.ParameterResponseType, responseType)
 
+		notAuthenticated := false
+
 		sessionId, err := r.Cookie("sessionid")
 		if err != nil {
-			util.RedirectToLogin(w, r, *h.loginUrl, r.URL)
-			return
+			notAuthenticated = true
+			sessionId = &http.Cookie{Name: "sessionid", Value: ""}
+		} else {
+			isAuthenticated, err := h.userAuthService.IsSessionValid(sessionId.Value)
+			if err != nil {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				return
+			}
+			if !isAuthenticated {
+				notAuthenticated = true
+			}
 		}
-		isAuthenticated, err := h.userAuthService.IsSessionValid(sessionId.Value)
-		if err != nil {
-			w.WriteHeader(http.StatusServiceUnavailable)
-			return
-		}
-		if !isAuthenticated {
-			util.RedirectToLogin(w, r, *h.loginUrl, r.URL)
+
+		if notAuthenticated {
+			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
 
@@ -79,7 +85,6 @@ func (h *approvalEndpointHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 					if CheckMAC(params, userId, expirationTimeValue, sessionId.Value, mac, key) {
 						redirectUri := handler.Execute(params)
 						http.Redirect(w, r, redirectUri.String(), http.StatusFound)
-						return
 					}
 				}
 			}

@@ -24,6 +24,7 @@ type approvalDeps struct {
 	responseTypes   map[string]*ResponseTypeMock
 	handler         http.Handler
 	userAuthService *service.UserAuthenticationServiceMock
+	params          url.Values
 	approvalParams  url.Values
 }
 
@@ -47,16 +48,27 @@ func makeApprovalEndpointHandler() approvalDeps {
 			"type2": type2,
 		})
 
+	params := url.Values{}
+	params.Add(oauth2.ParameterResponseType, "type1")
+	params.Add("param1", "value1")
+	params.Add("param2", "value2")
+
 	approvalParams := url.Values{}
 	approvalParams.Add(endpoint.ApprovalParameterUserId, "123456")
 	expirationTime := strconv.FormatInt(time.Now().Add(time.Hour).UnixNano(), 10)
 	approvalParams.Add(endpoint.ApprovalParameterExpirationTime, expirationTime)
+
+	key := endpoint.ComputeKey("123456", expirationTime, "SessionId", serverKey)
+	mac := endpoint.ComputeMAC(params, "123456", expirationTime, "SessionId", key)
+
+	approvalParams.Add(endpoint.ApprovalParameterSignature, base64.StdEncoding.EncodeToString(mac))
 
 	return approvalDeps{
 		serverKey:       serverKey,
 		responseTypes:   responseTypes,
 		handler:         handler,
 		userAuthService: userAuthService,
+		params:          params,
 		approvalParams:  approvalParams,
 	}
 }
@@ -91,7 +103,7 @@ func TestApprovalEndpointUnsupportedResponseTypeIsBadRequest(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, recorder.Code)
 }
 
-func TestApprovalEndpointRedirectedToLoginIfSessionCookieIsMissing(t *testing.T) {
+func TestApprovalEndpointUnauthorizedErrorIfSessionCookieIsMissing(t *testing.T) {
 	deps := makeApprovalEndpointHandler()
 
 	params := url.Values{}
@@ -103,7 +115,7 @@ func TestApprovalEndpointRedirectedToLoginIfSessionCookieIsMissing(t *testing.T)
 	recorder := httptest.NewRecorder()
 	deps.handler.ServeHTTP(recorder, request)
 
-	AssertIsRedirectedToLogin(t, recorder, request.URL)
+	assert.Equal(t, http.StatusUnauthorized, recorder.Code)
 	assertApprovalEndpointExpectations(t, deps)
 }
 
@@ -126,7 +138,7 @@ func TestApprovalEndpointStatusServiceUnavaliableOnSessionValidationError(t *tes
 	assertApprovalEndpointExpectations(t, deps)
 }
 
-func TestApprovalEndpointRedirectedToLogingIfSessionIdIsInvalid(t *testing.T) {
+func TestApprovalEndpointUnauthorizedErrorIfSessionIdIsInvalid(t *testing.T) {
 	deps := makeApprovalEndpointHandler()
 
 	params := url.Values{}
@@ -145,7 +157,7 @@ func TestApprovalEndpointRedirectedToLogingIfSessionIdIsInvalid(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	deps.handler.ServeHTTP(recorder, request)
 
-	AssertIsRedirectedToLogin(t, recorder, request.URL)
+	assert.Equal(t, http.StatusUnauthorized, recorder.Code)
 	assertApprovalEndpointExpectations(t, deps)
 }
 
