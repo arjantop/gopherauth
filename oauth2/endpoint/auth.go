@@ -89,7 +89,7 @@ func (h *authEndpointHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 		sessionId, err := r.Cookie("sessionid")
 		if err != nil {
-			h.redirectToLogin(w, r, &params)
+			util.RedirectToLogin(w, r, *h.loginUrl, r.URL)
 			return
 		}
 		isAuthenticated, err := h.userAuthService.IsSessionValid(sessionId.Value)
@@ -99,7 +99,7 @@ func (h *authEndpointHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 		if !isAuthenticated {
-			h.redirectToLogin(w, r, &params)
+			util.RedirectToLogin(w, r, *h.loginUrl, r.URL)
 			return
 		}
 		data := ApprovalPrompt{Scopes: []*Scope{&Scope{Description: "Scope description"}}}
@@ -118,9 +118,4 @@ func (h *authEndpointHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			Description: description,
 			Uri:         nil})
 	}
-}
-
-func (h *authEndpointHandler) redirectToLogin(w http.ResponseWriter, r *http.Request, params *url.Values) {
-	redirectUrl := h.loginUrl.String() + "?parameters=" + url.QueryEscape(params.Encode())
-	http.Redirect(w, r, redirectUrl, http.StatusFound)
 }

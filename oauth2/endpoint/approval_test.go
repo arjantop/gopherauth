@@ -91,7 +91,7 @@ func TestApprovalEndpointUnsupportedResponseTypeIsBadRequest(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, recorder.Code)
 }
 
-func TestApprovalEndpointRedirectedToLogingIfSessionCookieIsMissing(t *testing.T) {
+func TestApprovalEndpointRedirectedToLoginIfSessionCookieIsMissing(t *testing.T) {
 	deps := makeApprovalEndpointHandler()
 
 	params := url.Values{}
@@ -103,7 +103,7 @@ func TestApprovalEndpointRedirectedToLogingIfSessionCookieIsMissing(t *testing.T
 	recorder := httptest.NewRecorder()
 	deps.handler.ServeHTTP(recorder, request)
 
-	AssertIsRedirectedToLogin(t, recorder, &params)
+	AssertIsRedirectedToLogin(t, recorder, request.URL)
 	assertApprovalEndpointExpectations(t, deps)
 }
 
@@ -145,7 +145,7 @@ func TestApprovalEndpointRedirectedToLogingIfSessionIdIsInvalid(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	deps.handler.ServeHTTP(recorder, request)
 
-	AssertIsRedirectedToLogin(t, recorder, &params)
+	AssertIsRedirectedToLogin(t, recorder, request.URL)
 	assertApprovalEndpointExpectations(t, deps)
 }
 

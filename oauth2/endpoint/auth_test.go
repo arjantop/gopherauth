@@ -219,7 +219,7 @@ func TestUserIsRedirectedToLoginIfSessionCookieIsNotFound(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	deps.handler.ServeHTTP(recorder, request)
 
-	AssertIsRedirectedToLogin(t, recorder, &params)
+	AssertIsRedirectedToLogin(t, recorder, request.URL)
 	assertAuthEndpointExpectations(t, deps)
 }
 
@@ -239,7 +239,7 @@ func TestUserIsRedirectedToLoginIfSessionValueIsInvalid(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	deps.handler.ServeHTTP(recorder, request)
 
-	AssertIsRedirectedToLogin(t, recorder, &params)
+	AssertIsRedirectedToLogin(t, recorder, request.URL)
 	assertAuthEndpointExpectations(t, deps)
 }
 
@@ -309,10 +309,4 @@ func assertAuthEndpointExpectations(t *testing.T, deps authDeps) {
 func assertIsBadRequest(t *testing.T, recorder *httptest.ResponseRecorder) {
 	assert.Equal(t, http.StatusBadRequest, recorder.Code, "Response code should be 400 Bad Request")
 	assert.Equal(t, contentTypeHtml, recorder.Header().Get("Content-Type"), "Response type should be html")
-}
-
-func AssertIsRedirectedToLogin(t *testing.T, recorder *httptest.ResponseRecorder, params *url.Values) {
-	assert.Equal(t, http.StatusFound, recorder.Code, "Response code should be 302 Found")
-	assert.Equal(t, LoginUrl+"?parameters="+url.QueryEscape(params.Encode()),
-		recorder.Header().Get("Location"))
 }

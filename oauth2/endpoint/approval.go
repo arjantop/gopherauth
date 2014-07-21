@@ -11,6 +11,7 @@ import (
 
 	"github.com/arjantop/gopherauth/oauth2"
 	"github.com/arjantop/gopherauth/service"
+	"github.com/arjantop/gopherauth/util"
 )
 
 const (
@@ -53,7 +54,7 @@ func (h *approvalEndpointHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 
 		sessionId, err := r.Cookie("sessionid")
 		if err != nil {
-			h.redirectToLogin(w, r, &params)
+			util.RedirectToLogin(w, r, *h.loginUrl, r.URL)
 			return
 		}
 		isAuthenticated, err := h.userAuthService.IsSessionValid(sessionId.Value)
@@ -62,7 +63,7 @@ func (h *approvalEndpointHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 			return
 		}
 		if !isAuthenticated {
-			h.redirectToLogin(w, r, &params)
+			util.RedirectToLogin(w, r, *h.loginUrl, r.URL)
 			return
 		}
 
@@ -107,10 +108,4 @@ func ComputeKey(userId, expirationTime, sessionId string, key []byte) []byte {
 	keyMac.Write([]byte(expirationTime))
 	keyMac.Write([]byte(sessionId))
 	return keyMac.Sum(nil)
-}
-
-// TODO remove duplication
-func (h *approvalEndpointHandler) redirectToLogin(w http.ResponseWriter, r *http.Request, params *url.Values) {
-	redirectUrl := h.loginUrl.String() + "?parameters=" + url.QueryEscape(params.Encode())
-	http.Redirect(w, r, redirectUrl, http.StatusFound)
 }
