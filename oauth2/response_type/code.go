@@ -15,3 +15,7 @@ func NewCodeController() *CodeController {
 func (c *CodeController) ExtractParameters(r *http.Request) url.Values {
 	return extractParameters(r)
 }
+
+func (c *CodeController) Execute(params url.Values) url.URL {
+	return url.URL{}
+}

@@ -32,3 +32,15 @@ func NewEndpointRequest(t *testing.T, method, endpoint string, params url.Values
 	}
 	return request
 }
+
+func NewEndpointPostRequest(t *testing.T, endpoint string, urlParams, postParams url.Values) *http.Request {
+	getParams := ""
+	if len(urlParams) > 0 {
+		getParams = "?" + urlParams.Encode()
+	}
+	url := serviceUrl + "/" + endpoint + getParams
+	request, err := http.NewRequest("POST", url, strings.NewReader(postParams.Encode()))
+	assert.Nil(t, err)
+	request.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+	return request
+}
