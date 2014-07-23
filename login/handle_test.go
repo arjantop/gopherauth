@@ -4,6 +4,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -106,5 +107,48 @@ func TestLoginSessionIdIsSet(t *testing.T) {
 	assert.Equal(t, http.StatusFound, recorder.Code)
 	assert.Equal(t, redirectUrl, recorder.Header().Get("Location"))
 	assert.NotEmpty(t, recorder.Header().Get("Set-Cookie"), "Cookie must be set")
+	deps.userAuthService.Mock.AssertExpectations(t)
+}
+
+func TestLoginCredentialsErrorIsDisplayed(t *testing.T) {
+	deps := makeLogin()
+
+	request := testutil.NewEndpointPostRequest(t, "login", deps.getParams, deps.postParams)
+	nonceCookie := http.Cookie{Name: "nonce", Value: deps.nonce, HttpOnly: true}
+	request.AddCookie(&nonceCookie)
+
+	deps.tokenGenerator.On("Generate", uint(login.TokenSize)).Return([]byte("NewNonce"))
+	deps.userAuthService.On(
+		"AuthenticateUser",
+		deps.postParams.Get("email"),
+		deps.postParams.Get("password")).Return("", service.CredentialsMismatch{})
+
+	recorder := httptest.NewRecorder()
+	deps.handler.ServeHTTP(recorder, request)
+
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	assert.Contains(t, recorder.Body.String(), "class=\"error-message\"",
+		"Error message element is displayed")
+	deps.userAuthService.Mock.AssertExpectations(t)
+}
+
+func TestLoginServiceUnavaliableIsDisplayed(t *testing.T) {
+	deps := makeLogin()
+
+	request := testutil.NewEndpointPostRequest(t, "login", deps.getParams, deps.postParams)
+	nonceCookie := http.Cookie{Name: "nonce", Value: deps.nonce, HttpOnly: true}
+	request.AddCookie(&nonceCookie)
+
+	deps.tokenGenerator.On("Generate", uint(login.TokenSize)).Return([]byte("NewNonce"))
+	deps.userAuthService.On(
+		"AuthenticateUser",
+		deps.postParams.Get("email"),
+		deps.postParams.Get("password")).Return("", errors.New("error"))
+
+	recorder := httptest.NewRecorder()
+	deps.handler.ServeHTTP(recorder, request)
+
+	assert.Equal(t, http.StatusServiceUnavailable, recorder.Code)
+	assert.Contains(t, recorder.Body.String(), "Service Unavailable")
 	deps.userAuthService.Mock.AssertExpectations(t)
 }

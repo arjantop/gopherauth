@@ -61,6 +61,7 @@ func (h *loginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.templateFactory.ExecuteTemplate(w, "login", data)
 	case "POST":
 		// TODO: should not allow redirects to arbitrary URLs
+		// TODO: should redirect to a configured default url if parameter not present
 		continueUrl, errQ := url.QueryUnescape(r.URL.Query().Get("continue"))
 		paramsValid := errQ == nil && continueUrl != ""
 
