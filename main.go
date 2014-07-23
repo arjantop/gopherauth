@@ -24,10 +24,10 @@ func (m *UserAuthenticationServiceTest) AuthenticateUser(user, password string) 
 	if user == "user1@example.com" && password == "pass1" {
 		m.sessionMap["session1"] = "user1@example.com"
 		return "session1", nil
-	} else if user == "user1@example.com" {
-		return "", service.CredentialsMismatch{}
-	} else {
+	} else if user == "error@example.com" {
 		return "", errors.New("error")
+	} else {
+		return "", service.CredentialsMismatch{}
 	}
 }
 
@@ -35,7 +35,9 @@ func main() {
 	serverKey := []byte("server_key")
 	tokenGenerator := service.NewCryptoTokenGenerator()
 
-	userAuthService := &UserAuthenticationServiceTest{}
+	userAuthService := &UserAuthenticationServiceTest{
+		sessionMap: make(map[string]string),
+	}
 
 	templateFactory := util.NewTemplateFactory("templates")
 	http.Handle("/token", endpoint.NewTokenEndpointHandler(nil))

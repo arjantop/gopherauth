@@ -45,15 +45,15 @@ type Login struct {
 }
 
 func (h *loginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	randomNonce := base64.StdEncoding.EncodeToString(h.tokenGenerator.Generate(TokenSize))
-	nonceCookie := http.Cookie{
-		Name:     CookieNonce,
-		Value:    randomNonce,
-		HttpOnly: true,
-	}
-	http.SetCookie(w, &nonceCookie)
 	switch r.Method {
 	case "GET":
+		randomNonce := base64.StdEncoding.EncodeToString(h.tokenGenerator.Generate(TokenSize))
+		nonceCookie := http.Cookie{
+			Name:     CookieNonce,
+			Value:    randomNonce,
+			HttpOnly: true,
+		}
+		http.SetCookie(w, &nonceCookie)
 		data := Login{
 			Csrf: base64.StdEncoding.EncodeToString(computeMAC(randomNonce, h.serverKey)),
 		}

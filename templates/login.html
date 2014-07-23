@@ -105,9 +105,11 @@
     <section id="signin">
         <h1>Sign in with your account</h1>
         <form method="post" action="">
-            <input id="email" name="email" type="email" placeholder="Email" value="">
+            <input id="email" name="email" type="email" placeholder="Email" value="{{.User}}">
             <input id="password" name="password" value="" type="password" placeholder="Password">
-            <span class="error-message hidden">The email or password you entered is incorrect.</span>
+            {{if .ErrorMessage}}
+            <span class="error-message">{{.ErrorMessage}}</span>
+            {{end}}
             <input id="signIn" class="submit-button" name="signIn" value="Sign in" type="submit">
             <input name="csrf" type="hidden" value="{{.Csrf}}">
         </form>
