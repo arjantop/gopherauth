@@ -30,7 +30,7 @@ type AccessTokenResponse struct {
 }
 
 func (r *AccessTokenResponse) WriteResponse(w http.ResponseWriter, code int) bool {
-	w.Header().Set("Content-Type", "application/json;charset=UTF-8")
+	w.Header().Set("Content-Type", "application/json;charset=utf-8")
 	jsonValue, err := json.Marshal(r)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -52,7 +52,7 @@ func (e *ErrorResponse) Error() string {
 }
 
 func (e *ErrorResponse) WriteResponse(w http.ResponseWriter, code int) {
-	w.Header().Set("Content-Type", "application/json;charset=UTF-8")
+	w.Header().Set("Content-Type", "application/json;charset=utf-8")
 	jsonValue, err := json.Marshal(e)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)

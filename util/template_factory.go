@@ -20,10 +20,14 @@ type TemplateFactory struct {
 // init reads required templates located at templateRoot, parses them and adds them
 // to a template map.
 func (tf *TemplateFactory) init() {
-	template_error_response := template.Must(template.ParseFiles(path.Join(tf.templateRoot, "error_response.html")))
-	tf.templates["error_response"] = template_error_response
-	template_approval_prompt := template.Must(template.ParseFiles(path.Join(tf.templateRoot, "approval_prompt.html")))
-	tf.templates["approval_prompt"] = template_approval_prompt
+	errorResponseTemplate := template.Must(template.ParseFiles(path.Join(tf.templateRoot, "error_response.html")))
+	tf.templates["error_response"] = errorResponseTemplate
+	approvalPromptTemplate := template.Must(template.ParseFiles(path.Join(tf.templateRoot, "approval_prompt.html")))
+	tf.templates["approval_prompt"] = approvalPromptTemplate
+
+	loginTemplate := template.Must(template.ParseFiles(path.Join(tf.templateRoot, "login.html")))
+	tf.templates["login"] = loginTemplate
+
 	noTemplateFoundTemplate := template.Must(template.New("no_template_found").Parse("No template found"))
 	tf.templates["no_template_found"] = noTemplateFoundTemplate
 }

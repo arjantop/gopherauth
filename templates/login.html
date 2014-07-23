@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="initial-scale=1">
+    <title>Sign in</title>
+
+    <link href='http://fonts.googleapis.com/css?family=Open+Sans' rel='stylesheet' type='text/css'>
+    <style type="text/css">
+        @viewport {
+            zoom: 1.0;
+            width: device-width;
+        }
+
+        body {
+            font-size: 16px;
+            font-family: 'Open Sans', sans-serif;
+        }
+
+        #email {
+            margin-bottom: 3px;
+        }
+
+        input[type="email"],
+        input[type="password"] {
+            height: 3em;
+            padding: 0 1em;
+        }
+
+        input[type="email"]:focus,
+        input[type="password"]:focus {
+            border-color: #7a7a7a
+        }
+
+        input[type="email"],
+        input[type="password"],
+        input[type="submit"] {
+            display: block;
+            width: 100%;
+            margin-bottom: 8px;
+            box-sizing: border-box;
+            border: 1px #bababa solid;
+        }
+
+        .submit-button {
+            text-align: center;
+            margin: 0;
+            height: 3em;
+            background-color: #eaeaea;
+            color: #222;
+        }
+
+        .submit-button:hover {
+            color: #000;
+            background-color: #dadada;
+        }
+
+        #signin {
+            padding: 40px;
+            margin: 0 auto;
+            max-width: 25em;
+            min-width: 20em;
+        }
+
+        #signin h1 {
+            text-align: center;
+            font-size: 1.5em;
+            font-weight: normal;
+            margin-top: 0;
+            margin-bottom: 40px;
+        }
+
+        footer {
+            text-align: center;
+            font-size: 0.8em;
+        }
+
+        footer a,
+        footer a:hover,
+        footer a:visited {
+            text-decoration: none;
+            color: #0090ff;
+        }
+
+        footer a:hover {
+            text-decoration: underline;
+        }
+
+        .error-message {
+            color: #cc0000;
+            font-size: 0.8em;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+    <section id="signin">
+        <h1>Sign in with your account</h1>
+        <form method="post" action="">
+            <input id="email" name="email" type="email" placeholder="Email" value="">
+            <input id="password" name="password" value="" type="password" placeholder="Password">
+            <span class="error-message hidden">The email or password you entered is incorrect.</span>
+            <input id="signIn" class="submit-button" name="signIn" value="Sign in" type="submit">
+            <input name="csrf" type="hidden" value="{{.Csrf}}">
+        </form>
+    </section>
+    <footer>Powered by <a href="https://github.com/arjantop/gopherauth">gopherauth</a></footer>
+</body>
+</html>
