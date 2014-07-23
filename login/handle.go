@@ -4,6 +4,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
+	"fmt"
 	"net/http"
 	"net/url"
 
@@ -61,17 +62,21 @@ func (h *loginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "POST":
 		// TODO: should not allow redirects to arbitrary URLs
 		continueUrl, errQ := url.QueryUnescape(r.URL.Query().Get("continue"))
-		nonce, errC := r.Cookie(CookieNonce)
-		if errQ != nil || errC != nil || nonce.Value == "" {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
+		paramsValid := errQ == nil && continueUrl != ""
+
 		email := r.PostFormValue("email")
 		password := r.PostFormValue("password")
 		macEncoded := r.PostFormValue("csrf")
-		mac, err := base64.StdEncoding.DecodeString(macEncoded)
-		if err != nil || !hmac.Equal(mac, computeMAC(nonce.Value, h.serverKey)) {
-			w.WriteHeader(http.StatusBadRequest)
+
+		nonce, errC := r.Cookie(CookieNonce)
+		nonceValid := errC == nil && nonce.Value != ""
+		mac, errM := base64.StdEncoding.DecodeString(macEncoded)
+
+		if !paramsValid || !nonceValid || errM != nil || !hmac.Equal(mac, computeMAC(nonce.Value, h.serverKey)) {
+			util.RenderHTTPError(w, h.templateFactory, util.HTTPError{
+				StatusCode:  http.StatusBadRequest,
+				Description: "Some request parameters were invalid.",
+			})
 			return
 		}
 
@@ -80,11 +85,14 @@ func (h *loginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if _, ok := err.(service.CredentialsMismatch); ok {
 				data := Login{
 					User:         email,
-					ErrorMessage: "The email or password you enetered is incorrect.",
+					ErrorMessage: "The email or password you entered is incorrect.",
 				}
 				h.templateFactory.ExecuteTemplate(w, "login", data)
 			} else {
-				w.WriteHeader(http.StatusServiceUnavailable)
+				util.RenderHTTPError(w, h.templateFactory, util.HTTPError{
+					StatusCode:  http.StatusServiceUnavailable,
+					Description: "The service you're looking for is temporarily unavaliable.",
+				})
 			}
 			return
 		}
@@ -96,7 +104,11 @@ func (h *loginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.SetCookie(w, &sessionCookie)
 		http.Redirect(w, r, continueUrl, http.StatusFound)
 	default:
-		w.WriteHeader(http.StatusMethodNotAllowed)
+		util.RenderHTTPError(w, h.templateFactory, util.HTTPError{
+			StatusCode: http.StatusMethodNotAllowed,
+			Description: fmt.Sprintf(
+				"The request method %s is not supported for the URL %s.", r.Method, r.URL.Path),
+		})
 	}
 }
 

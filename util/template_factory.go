@@ -28,6 +28,9 @@ func (tf *TemplateFactory) init() {
 	loginTemplate := template.Must(template.ParseFiles(path.Join(tf.templateRoot, "login.html")))
 	tf.templates["login"] = loginTemplate
 
+	httpErrorTemplate := template.Must(template.ParseFiles(path.Join(tf.templateRoot, "http_error.html")))
+	tf.templates["http_error"] = httpErrorTemplate
+
 	noTemplateFoundTemplate := template.Must(template.New("no_template_found").Parse("No template found"))
 	tf.templates["no_template_found"] = noTemplateFoundTemplate
 }
