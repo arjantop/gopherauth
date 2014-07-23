@@ -44,7 +44,7 @@ type Login struct {
 }
 
 func (h *loginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	randomNonce := base64.StdEncoding.EncodeToString(h.tokenGenerator.Generate(128))
+	randomNonce := base64.StdEncoding.EncodeToString(h.tokenGenerator.Generate(TokenSize))
 	nonceCookie := http.Cookie{
 		Name:     CookieNonce,
 		Value:    randomNonce,
