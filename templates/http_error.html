@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="initial-scale=1">
+    <title>Error</title>
+
+    <link href='http://fonts.googleapis.com/css?family=Open+Sans' rel='stylesheet' type='text/css'>
+    <style type="text/css">
+        @viewport {
+            zoom: 1.0;
+            width: device-width;
+        }
+
+        body {
+            margin: 0;
+            font-size: 16px;
+            font-family: 'Open Sans', sans-serif;
+        }
+
+        #error-card {
+            padding: 40px;
+            margin: 0 auto;
+            max-width: 400px;
+            min-width: 320px;
+            box-sizing: border-box;
+        }
+
+        #error-card p:first-child {
+            margin-bottom: 2px;
+        }
+
+        #error-card p b {
+            font-size: 1.5em;
+        }
+
+        #error-card p span {
+            font-size: 1.3em;
+            color: #444;
+        }
+
+        #error-card #description {
+            font-size: 0.9em;
+        }
+
+        #error-card #message {
+            color: #888;
+            font-size: 0.8em;
+            margin-top: 0;
+        }
+    </style>
+</head>
+<body>
+    <div id="error-card">
+        <p>
+            <b>{{.StatusCode}}</b>
+            <span>{{.StatusText}}</span>
+        </p>
+        <p id="message">Something went wrong.</p>
+        <p id="description">{{.Description}}</p>
+    </div>
+</body>
+</html>
