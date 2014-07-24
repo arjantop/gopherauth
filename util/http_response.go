@@ -16,8 +16,17 @@ type HTTPError struct {
 	Description string
 }
 
+func HTTPErrorServiceUnavaliable() HTTPError {
+	return HTTPError{
+		StatusCode:  http.StatusServiceUnavailable,
+		Description: "The service you're looking for is temporarily unavaliable.",
+	}
+
+}
+
 func RenderHTTPError(w http.ResponseWriter, tf *TemplateFactory, he HTTPError) {
 	w.WriteHeader(he.StatusCode)
+	w.Header().Add("Content-Type", "text/html; charset=utf-8")
 	if he.StatusText == "" {
 		he.StatusText = http.StatusText(he.StatusCode)
 	}
@@ -25,6 +34,6 @@ func RenderHTTPError(w http.ResponseWriter, tf *TemplateFactory, he HTTPError) {
 }
 
 func RedirectToLogin(w http.ResponseWriter, r *http.Request, loginURL url.URL, returnTo *url.URL) {
-	loginURL.RawQuery = "return_to=" + url.QueryEscape(returnTo.String())
+	loginURL.RawQuery = "continue=" + url.QueryEscape(returnTo.String())
 	http.Redirect(w, r, loginURL.String(), http.StatusFound)
 }

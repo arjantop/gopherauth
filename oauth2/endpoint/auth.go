@@ -73,8 +73,7 @@ func (h *authEndpointHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 		validationResult, err := h.oauth2Service.ValidateScope(scope)
 		if err != nil {
-			//TODO display user friendly error
-			w.WriteHeader(http.StatusServiceUnavailable)
+			util.RenderHTTPError(w, h.templateFactory, util.HTTPErrorServiceUnavaliable())
 			return
 		}
 		if !validationResult.IsValid() {
@@ -94,8 +93,7 @@ func (h *authEndpointHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		}
 		isAuthenticated, err := h.userAuthService.IsSessionValid(sessionId.Value)
 		if err != nil {
-			//TODO display user friendly error
-			w.WriteHeader(http.StatusServiceUnavailable)
+			util.RenderHTTPError(w, h.templateFactory, util.HTTPErrorServiceUnavaliable())
 			return
 		}
 		if !isAuthenticated {

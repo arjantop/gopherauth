@@ -14,6 +14,6 @@ func AssertIsRedirectedToLogin(t *testing.T, recorder *httptest.ResponseRecorder
 	redirectUrl, err := url.Parse(recorder.Header().Get("Location"))
 	assert.Nil(t, err)
 	assert.True(t, redirectUrl.IsAbs())
-	assert.NotEmpty(t, redirectUrl.Query().Get("return_to"),
-		"return_to parameter must be present: %s", redirectUrl.String())
+	assert.NotEmpty(t, redirectUrl.Query().Get("continue"),
+		"continue parameter must be present: %s", redirectUrl.String())
 }

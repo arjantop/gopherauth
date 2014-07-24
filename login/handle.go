@@ -90,10 +90,7 @@ func (h *loginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				}
 				h.templateFactory.ExecuteTemplate(w, "login", data)
 			} else {
-				util.RenderHTTPError(w, h.templateFactory, util.HTTPError{
-					StatusCode:  http.StatusServiceUnavailable,
-					Description: "The service you're looking for is temporarily unavaliable.",
-				})
+				util.RenderHTTPError(w, h.templateFactory, util.HTTPErrorServiceUnavaliable())
 			}
 			return
 		}

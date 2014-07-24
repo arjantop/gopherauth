@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"net/http"
+	"net/url"
 
 	"github.com/arjantop/gopherauth/login"
 	"github.com/arjantop/gopherauth/oauth2"
@@ -31,6 +32,39 @@ func (m *UserAuthenticationServiceTest) AuthenticateUser(user, password string) 
 	}
 }
 
+type Oauth2ServiceTest struct {
+}
+
+func (s *Oauth2ServiceTest) ValidateScope(scope []string) (*service.ScopeValidationResult, error) {
+	result := service.ScopeValidationResult{
+		Valid: scope,
+	}
+	return &result, nil
+}
+
+func (s *Oauth2ServiceTest) PasswordFlow(
+	c *service.ClientCredentials,
+	username, password string) (*oauth2.AccessTokenResponse, error) {
+
+	response := oauth2.AccessTokenResponse{
+		AccessToken: "token",
+		TokenType:   "Bearer",
+		ExpiresIn:   1000,
+	}
+	return &response, nil
+}
+
+func (s *Oauth2ServiceTest) AuthorizationCode(
+	c *service.ClientCredentials, code, redirect_uri string) (*oauth2.AccessTokenResponse, error) {
+
+	response := oauth2.AccessTokenResponse{
+		AccessToken: "token",
+		TokenType:   "Bearer",
+		ExpiresIn:   1000,
+	}
+	return &response, nil
+}
+
 func main() {
 	serverKey := []byte("server_key")
 	tokenGenerator := service.NewCryptoTokenGenerator()
@@ -38,6 +72,10 @@ func main() {
 	userAuthService := &UserAuthenticationServiceTest{
 		sessionMap: make(map[string]string),
 	}
+
+	loginUrl, _ := url.Parse("/login")
+
+	oauth2Service := &Oauth2ServiceTest{}
 
 	templateFactory := util.NewTemplateFactory("templates")
 	http.Handle("/token", endpoint.NewTokenEndpointHandler(nil))
@@ -49,7 +87,7 @@ func main() {
 	responseTypeHandlers[oauth2.ResponseTypeCode] = codeHandler
 
 	authEndpointController := endpoint.NewAuthEndpointHandler(
-		nil, nil, nil,
+		loginUrl, oauth2Service, userAuthService,
 		templateFactory,
 		responseTypeHandlers)
 	http.Handle("/auth", authEndpointController)
