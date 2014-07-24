@@ -38,13 +38,13 @@ func (m *ResponseTypeMock) ExtractParameters(r *http.Request) url.Values {
 	return params
 }
 
-func (m *ResponseTypeMock) Execute(params url.Values) url.URL {
+func (m *ResponseTypeMock) Execute(params url.Values) (*url.URL, error) {
 	args := m.Mock.Called(params)
-	url, ok := args.Get(0).(url.URL)
+	url, ok := args.Get(0).(*url.URL)
 	if !ok {
-		panic("Return value is not of yupe net.URL")
+		panic("Return value is not of correct type")
 	}
-	return url
+	return url, args.Error(1)
 }
 
 func NewResponseTypeMock() *ResponseTypeMock {
@@ -69,6 +69,7 @@ func makeAuthEndpointHandler() authDeps {
 	oauth2Service := service.NewOauth2ServiceMock()
 	userAuthService := service.NewUserAuthenticationServiceMock()
 	handler := endpoint.NewAuthEndpointHandler(
+		[]byte("ServerKey"),
 		makeLoginUrl(),
 		oauth2Service,
 		userAuthService,

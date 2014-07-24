@@ -1,9 +1,12 @@
 package endpoint
 
 import (
+	"encoding/base64"
 	"fmt"
+	"html/template"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/arjantop/gopherauth/oauth2"
 	"github.com/arjantop/gopherauth/oauth2/helpers"
@@ -11,20 +14,26 @@ import (
 	"github.com/arjantop/gopherauth/util"
 )
 
+const expiresIn = 2 * time.Hour
+
 type Scope struct {
 	Description string
 }
 
 type ApprovalPrompt struct {
-	Scopes []*Scope
+	Scopes         []*Scope
+	ExpirationTime int64
+	Signature      string
+	Parameters     template.URL
 }
 
 type ResponseType interface {
 	ExtractParameters(r *http.Request) url.Values
-	Execute(params url.Values) url.URL
+	Execute(params url.Values) (*url.URL, error)
 }
 
 type authEndpointHandler struct {
+	serverKey       []byte
 	loginUrl        *url.URL
 	oauth2Service   service.Oauth2Service
 	userAuthService service.UserAuthenticationService
@@ -33,6 +42,7 @@ type authEndpointHandler struct {
 }
 
 func NewAuthEndpointHandler(
+	serverKey []byte,
 	loginUrl *url.URL,
 	oauth2Service service.Oauth2Service,
 	userAuthService service.UserAuthenticationService,
@@ -40,6 +50,7 @@ func NewAuthEndpointHandler(
 	handlers map[string]ResponseType) http.Handler {
 
 	handler := &authEndpointHandler{
+		serverKey:       serverKey,
 		loginUrl:        loginUrl,
 		oauth2Service:   oauth2Service,
 		userAuthService: userAuthService,
@@ -100,7 +111,15 @@ func (h *authEndpointHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			util.RedirectToLogin(w, r, *h.loginUrl, r.URL)
 			return
 		}
-		data := ApprovalPrompt{Scopes: []*Scope{&Scope{Description: "Scope description"}}}
+		expirationTime := time.Now().Add(expiresIn).UnixNano()
+		userKey := ComputeKey(expirationTime, sessionId.Value, h.serverKey)
+		sig := ComputeMAC(params, expirationTime, sessionId.Value, userKey)
+		data := ApprovalPrompt{
+			Scopes:         []*Scope{&Scope{Description: "Scope description"}},
+			ExpirationTime: expirationTime,
+			Signature:      base64.StdEncoding.EncodeToString(sig),
+			Parameters:     template.URL(params.Encode()),
+		}
 		w.Header().Add("Content-Type", "text/html; charset=utf-8")
 		// TODO: Finish implementing approval prompt
 		h.templateFactory.ExecuteTemplate(w, "approval_prompt", &data)

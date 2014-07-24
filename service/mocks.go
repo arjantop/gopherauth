@@ -1,6 +1,8 @@
 package service
 
 import (
+	"net/url"
+
 	"github.com/stretchr/testify/mock"
 
 	"github.com/arjantop/gopherauth/oauth2"
@@ -40,7 +42,17 @@ func (s *Oauth2ServiceMock) PasswordFlow(c *ClientCredentials, username, passwor
 	return tokenResponse, args.Error(1)
 }
 
-func (s *Oauth2ServiceMock) AuthorizationCode(c *ClientCredentials, code, redirect_uri string) (*oauth2.AccessTokenResponse, error) {
+func (s *Oauth2ServiceMock) Code(
+	clientId string, redirectURI *url.URL, scope, state string) (*oauth2.AuthorizationResponse, error) {
+
+	args := s.Mock.Called(clientId, redirectURI, scope, state)
+	response, _ := args.Get(0).(*oauth2.AuthorizationResponse)
+	return response, args.Error(1)
+}
+
+func (s *Oauth2ServiceMock) AuthorizationCode(
+	c *ClientCredentials, code, redirect_uri string) (*oauth2.AccessTokenResponse, error) {
+
 	args := s.Mock.Called(c, code, redirect_uri)
 	tokenResponse, _ := args.Get(0).(*oauth2.AccessTokenResponse)
 	return tokenResponse, args.Error(1)
@@ -58,7 +70,7 @@ func (t *TokenGeneratorMock) Generate(n uint) []byte {
 	args := t.Mock.Called(n)
 	token, ok := args.Get(0).([]byte)
 	if !ok {
-		panic("Argument 0 nto of type []byte")
+		panic("Argument 0 not of correct type")
 	}
 	return token
 }

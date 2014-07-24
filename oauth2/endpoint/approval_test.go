@@ -29,7 +29,6 @@ type approvalDeps struct {
 }
 
 func makeApprovalEndpointHandler() approvalDeps {
-	loginUrl, _ := url.Parse(LoginUrl)
 	serverKey := []byte("ServerKey")
 	type1 := NewResponseTypeMock()
 	type2 := NewResponseTypeMock()
@@ -40,7 +39,6 @@ func makeApprovalEndpointHandler() approvalDeps {
 	userAuthService := service.NewUserAuthenticationServiceMock()
 
 	handler := endpoint.NewApprovalEndpointHandler(
-		loginUrl,
 		serverKey,
 		userAuthService,
 		map[string]endpoint.ResponseType{
@@ -54,12 +52,11 @@ func makeApprovalEndpointHandler() approvalDeps {
 	params.Add("param2", "value2")
 
 	approvalParams := url.Values{}
-	approvalParams.Add(endpoint.ApprovalParameterUserId, "123456")
-	expirationTime := strconv.FormatInt(time.Now().Add(time.Hour).UnixNano(), 10)
-	approvalParams.Add(endpoint.ApprovalParameterExpirationTime, expirationTime)
+	expirationTime := time.Now().Add(time.Hour).UnixNano()
+	approvalParams.Add(endpoint.ApprovalParameterExpirationTime, strconv.FormatInt(expirationTime, 10))
 
-	key := endpoint.ComputeKey("123456", expirationTime, "SessionId", serverKey)
-	mac := endpoint.ComputeMAC(params, "123456", expirationTime, "SessionId", key)
+	key := endpoint.ComputeKey(expirationTime, "SessionId", serverKey)
+	mac := endpoint.ComputeMAC(params, expirationTime, "SessionId", key)
 
 	approvalParams.Add(endpoint.ApprovalParameterSignature, base64.StdEncoding.EncodeToString(mac))
 
@@ -197,11 +194,12 @@ func TestApprovalAfterSuccessfulValidationUserIsRedirectedToRedirectUri(t *testi
 	params.Add(oauth2.ParameterResponseType, "type1")
 	params.Add("param1", "value1")
 
-	userId := deps.approvalParams.Get(endpoint.ApprovalParameterUserId)
-	expirationTime := deps.approvalParams.Get(endpoint.ApprovalParameterExpirationTime)
+	expirationTimeValue := deps.approvalParams.Get(endpoint.ApprovalParameterExpirationTime)
+	expirationTime, err := strconv.ParseInt(expirationTimeValue, 10, 64)
+	assert.Nil(t, err)
 
-	key := endpoint.ComputeKey(userId, expirationTime, "SessionId", deps.serverKey)
-	mac := endpoint.ComputeMAC(params, userId, expirationTime, "SessionId", key)
+	key := endpoint.ComputeKey(expirationTime, "SessionId", deps.serverKey)
+	mac := endpoint.ComputeMAC(params, expirationTime, "SessionId", key)
 
 	deps.approvalParams.Set(endpoint.ApprovalParameterSignature, base64.StdEncoding.EncodeToString(mac))
 
@@ -217,7 +215,7 @@ func TestApprovalAfterSuccessfulValidationUserIsRedirectedToRedirectUri(t *testi
 	deps.responseTypes["type1"].On("ExtractParameters", request).Return(extractedParams)
 	uri, err := url.Parse(RedirectUri)
 	assert.Nil(t, err)
-	deps.responseTypes["type1"].On("Execute", extractedParams).Return(*uri)
+	deps.responseTypes["type1"].On("Execute", extractedParams).Return(uri, nil)
 	deps.userAuthService.On("IsSessionValid", "SessionId").Return(true, nil)
 
 	recorder := httptest.NewRecorder()

@@ -23,6 +23,13 @@ type AuthorizationResponse struct {
 	State string `json:"state"`
 }
 
+func (r *AuthorizationResponse) Encode() string {
+	vals := url.Values{}
+	vals.Add("code", r.Code)
+	vals.Add("state", r.State)
+	return vals.Encode()
+}
+
 type AccessTokenResponse struct {
 	AccessToken string `json:"access_token"`
 	TokenType   string `json:"token_type"`

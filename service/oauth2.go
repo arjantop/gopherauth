@@ -1,6 +1,10 @@
 package service
 
-import "github.com/arjantop/gopherauth/oauth2"
+import (
+	"net/url"
+
+	"github.com/arjantop/gopherauth/oauth2"
+)
 
 type ClientCredentials struct {
 	Id     string
@@ -21,5 +25,7 @@ type Oauth2Service interface {
 
 	PasswordFlow(c *ClientCredentials, username, password string) (*oauth2.AccessTokenResponse, error)
 
-	AuthorizationCode(c *ClientCredentials, code, redirect_uri string) (*oauth2.AccessTokenResponse, error)
+	Code(clientId string, redirectURI *url.URL, scope, state string) (*oauth2.AuthorizationResponse, error)
+
+	AuthorizationCode(c *ClientCredentials, code, redirectUri string) (*oauth2.AccessTokenResponse, error)
 }

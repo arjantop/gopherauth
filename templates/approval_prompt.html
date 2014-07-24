@@ -11,9 +11,11 @@
                 {{end}}
             </ul>
         </div>
-        <form method="POST">
-            <button>Cancel</button>
-            <button>Accept</button>
+        <form method="POST" action="/approval?{{.Parameters}}">
+            <input name="expiration_time" type="hidden" value="{{.ExpirationTime}}">
+            <input name="signature" type="hidden" value="{{.Signature}}">
+            <input name="cancel" type="submit" value="Cancel">
+            <input name="accept" type="submit" value="Accept">
         </form>
     </body>
 </html>

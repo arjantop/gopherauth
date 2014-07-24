@@ -16,7 +16,7 @@ type tokenDeps struct {
 }
 
 func makeTokenController() tokenDeps {
-	params := makeAuthCodeRequestParameters()
+	params := makeTokenRequestParameters()
 	return tokenDeps{
 		params:     params,
 		controller: response_type.NewTokenController(),

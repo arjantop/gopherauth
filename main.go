@@ -54,6 +54,16 @@ func (s *Oauth2ServiceTest) PasswordFlow(
 	return &response, nil
 }
 
+func (s *Oauth2ServiceTest) Code(
+	clientId string, redirectURI *url.URL, scope, state string) (*oauth2.AuthorizationResponse, error) {
+
+	response := oauth2.AuthorizationResponse{
+		Code:  "code",
+		State: state,
+	}
+	return &response, nil
+}
+
 func (s *Oauth2ServiceTest) AuthorizationCode(
 	c *service.ClientCredentials, code, redirect_uri string) (*oauth2.AccessTokenResponse, error) {
 
@@ -83,16 +93,16 @@ func main() {
 	responseTypeHandlers := map[string]endpoint.ResponseType{}
 	tokenHandler := response_type.NewTokenController()
 	responseTypeHandlers[oauth2.ResponseTypeToken] = tokenHandler
-	codeHandler := response_type.NewCodeController()
+	codeHandler := response_type.NewCodeController(oauth2Service)
 	responseTypeHandlers[oauth2.ResponseTypeCode] = codeHandler
 
 	authEndpointController := endpoint.NewAuthEndpointHandler(
-		loginUrl, oauth2Service, userAuthService,
+		serverKey, loginUrl, oauth2Service, userAuthService,
 		templateFactory,
 		responseTypeHandlers)
 	http.Handle("/auth", authEndpointController)
 
-	approvalHandler := endpoint.NewApprovalEndpointHandler(nil, nil, nil, nil)
+	approvalHandler := endpoint.NewApprovalEndpointHandler(serverKey, userAuthService, responseTypeHandlers)
 	http.Handle("/approval", approvalHandler)
 
 	loginHandler := login.NewLoginHandler(serverKey, userAuthService, tokenGenerator, templateFactory)

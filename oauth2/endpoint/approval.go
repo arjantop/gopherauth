@@ -14,26 +14,22 @@ import (
 )
 
 const (
-	ApprovalParameterUserId         = "user_id"
 	ApprovalParameterExpirationTime = "expiration_time"
 	ApprovalParameterSignature      = "signature"
 )
 
 type approvalEndpointHandler struct {
-	loginUrl        *url.URL
 	serverKey       []byte
 	userAuthService service.UserAuthenticationService
 	handlers        map[string]ResponseType
 }
 
 func NewApprovalEndpointHandler(
-	loginUrl *url.URL,
 	serverKey []byte,
 	userAuthService service.UserAuthenticationService,
 	handlers map[string]ResponseType) http.Handler {
 
 	return &approvalEndpointHandler{
-		loginUrl:        loginUrl,
 		serverKey:       serverKey,
 		userAuthService: userAuthService,
 		handlers:        handlers,
@@ -73,7 +69,6 @@ func (h *approvalEndpointHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 			return
 		}
 
-		userId := r.PostFormValue(ApprovalParameterUserId)
 		expirationTimeValue := r.PostFormValue(ApprovalParameterExpirationTime)
 		signature := r.PostFormValue(ApprovalParameterSignature)
 
@@ -81,10 +76,15 @@ func (h *approvalEndpointHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 			currentTimestamp := time.Now().UnixNano()
 			if currentTimestamp <= expirationTime {
 				if mac, err := base64.StdEncoding.DecodeString(signature); err == nil {
-					key := ComputeKey(userId, expirationTimeValue, sessionId.Value, h.serverKey)
-					if CheckMAC(params, userId, expirationTimeValue, sessionId.Value, mac, key) {
-						redirectUri := handler.Execute(params)
+					key := ComputeKey(expirationTime, sessionId.Value, h.serverKey)
+					if CheckMAC(params, expirationTime, sessionId.Value, mac, key) {
+						redirectUri, err := handler.Execute(params)
+						if err != nil {
+							w.WriteHeader(http.StatusServiceUnavailable)
+							return
+						}
 						http.Redirect(w, r, redirectUri.String(), http.StatusFound)
+						return
 					}
 				}
 			}
@@ -93,24 +93,22 @@ func (h *approvalEndpointHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 	w.WriteHeader(http.StatusBadRequest)
 }
 
-func ComputeMAC(params url.Values, userId, expirationTime, sessionId string, key []byte) []byte {
+func ComputeMAC(params url.Values, expirationTime int64, sessionId string, key []byte) []byte {
 	paramsEncoded := params.Encode()
 	computedMac := hmac.New(sha256.New, key)
 	computedMac.Write([]byte(paramsEncoded))
-	computedMac.Write([]byte(userId))
-	computedMac.Write([]byte(expirationTime))
+	computedMac.Write([]byte(strconv.FormatInt(expirationTime, 10)))
 	computedMac.Write([]byte(sessionId))
 	return computedMac.Sum(nil)
 }
 
-func CheckMAC(params url.Values, userId, expirationTime, sessionId string, mac, key []byte) bool {
-	return hmac.Equal(mac, ComputeMAC(params, userId, expirationTime, sessionId, key))
+func CheckMAC(params url.Values, expirationTime int64, sessionId string, mac, key []byte) bool {
+	return hmac.Equal(mac, ComputeMAC(params, expirationTime, sessionId, key))
 }
 
-func ComputeKey(userId, expirationTime, sessionId string, key []byte) []byte {
+func ComputeKey(expirationTime int64, sessionId string, key []byte) []byte {
 	keyMac := hmac.New(sha256.New, key)
-	keyMac.Write([]byte(userId))
-	keyMac.Write([]byte(expirationTime))
+	keyMac.Write([]byte(strconv.FormatInt(expirationTime, 10)))
 	keyMac.Write([]byte(sessionId))
 	return keyMac.Sum(nil)
 }
