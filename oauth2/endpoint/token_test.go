@@ -2,6 +2,7 @@ package endpoint_test
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -11,28 +12,69 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/arjantop/gopherauth/oauth2"
 	"github.com/arjantop/gopherauth/oauth2/endpoint"
+	"github.com/arjantop/gopherauth/service"
+	"github.com/arjantop/gopherauth/testutil"
 )
 
-func makeParameters() url.Values {
-	return map[string][]string{
-		"grant_type": []string{"password"},
-		"username":   []string{"user"},
-		"password":   []string{"pass"},
+type GrantTypeMock struct {
+	mock.Mock
+}
+
+func (m *GrantTypeMock) ExtractParameters(r *http.Request) url.Values {
+	args := m.Mock.Called(r)
+	params, _ := args.Get(0).(url.Values)
+	return params
+}
+
+func (m *GrantTypeMock) Execute(
+	clientCredentials *service.ClientCredentials, params url.Values) (*oauth2.AccessTokenResponse, error) {
+
+	args := m.Mock.Called(clientCredentials, params)
+	response, _ := args.Get(0).(*oauth2.AccessTokenResponse)
+	return response, args.Error(1)
+}
+
+type tokenDeps struct {
+	grantTypes map[string]*GrantTypeMock
+	handler    http.Handler
+}
+
+func makeTokenDeps() tokenDeps {
+	type1 := &GrantTypeMock{}
+	type2 := &GrantTypeMock{}
+	grantTypes := map[string]*GrantTypeMock{
+		"type1": type1,
+		"type2": type2,
+	}
+	return tokenDeps{
+		grantTypes: grantTypes,
+		handler: endpoint.NewTokenEndpointHandler(map[string]endpoint.GrantType{
+			"type1": type1,
+			"type2": type2,
+		}),
 	}
 }
 
-func TestOnlyPostMethodIsAllowed(t *testing.T) {
+func makeTokenParameters() url.Values {
+	return map[string][]string{
+		"grant_type": []string{"type1"},
+		"param1":     []string{"val1"},
+		"param2":     []string{"val2"},
+	}
+}
+
+func TestTokenEndpointOnlyAcceptsPostHttpMethod(t *testing.T) {
 	httpMethods := []string{"GET", "HEAD", "PUT", "DELETE",
 		"TRACE", "OPTIONS", "CONNECT", "PATCH"}
 	for _, method := range httpMethods {
 		handler := endpoint.NewTokenEndpointHandler(nil)
 		recorder := httptest.NewRecorder()
 
-		request, err := http.NewRequest(
-			method, "https://example.com/token", strings.NewReader("body"))
+		request, err := http.NewRequest(method, "", strings.NewReader("body"))
 		assert.Nil(t, err)
 
 		handler.ServeHTTP(recorder, request)
@@ -43,30 +85,28 @@ func TestOnlyPostMethodIsAllowed(t *testing.T) {
 	}
 }
 
-func TestNoCachingHeadersAreSetOnTokenEndpoint(t *testing.T) {
-	handler := endpoint.NewTokenEndpointHandler(nil)
-	recorder := httptest.NewRecorder()
-	request, err := http.NewRequest("POST", "https://example.com/token", nil)
-	assert.Nil(t, err)
+func TestTokenEndpointNoCachingHeadersAreSet(t *testing.T) {
+	deps := makeTokenDeps()
 
-	handler.ServeHTTP(recorder, request)
+	request := testutil.NewEndpointRequest(t, "POST", "token", nil)
+
+	recorder := httptest.NewRecorder()
+	deps.handler.ServeHTTP(recorder, request)
 
 	assert.Equal(t, recorder.Header().Get("Cache-Control"), "no-store")
 	assert.Equal(t, recorder.Header().Get("Pragma"), "no-cache")
 }
 
-func TestErrorIsDisplayedIfGrantTypeIsunsupported(t *testing.T) {
-	handler := endpoint.NewTokenEndpointHandler(nil)
+func TestTokenEndpointUnsupportedGrantTypeError(t *testing.T) {
+	deps := makeTokenDeps()
 
 	params := url.Values{}
 	params.Add("grant_type", "unsupported")
-	postParams := strings.NewReader(params.Encode())
-	request, err := http.NewRequest("POST", "https://example.com/token", postParams)
-	request.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-	assert.Nil(t, err)
+	request := testutil.NewEndpointRequest(t, "POST", "token", params)
+	request.SetBasicAuth("client_id", "client_secret")
 
 	recorder := httptest.NewRecorder()
-	handler.ServeHTTP(recorder, request)
+	deps.handler.ServeHTTP(recorder, request)
 
 	assert.Equal(t, http.StatusBadRequest, recorder.Code)
 	var jsonMap map[string]interface{}
@@ -74,71 +114,179 @@ func TestErrorIsDisplayedIfGrantTypeIsunsupported(t *testing.T) {
 	assert.Equal(t, oauth2.ErrorUnsupportedGrantType, jsonMap["error"])
 }
 
-func TestGrantTypePasswordControllerIsCalled(t *testing.T) {
-	var ctrlCalled bool
-	passwordCtrl := func(w http.ResponseWriter, r *http.Request) {
-		if ctrlCalled {
-			assert.Fail(t, "Controller must only be called once")
-		}
-		ctrlCalled = true
-	}
-	handler := endpoint.NewTokenEndpointHandler(http.HandlerFunc(passwordCtrl))
+func TestTokenEndpointCorrectGrantTypeIsCalled(t *testing.T) {
+	deps := makeTokenDeps()
 
-	params := url.Values{}
-	params.Add("grant_type", "password")
-	postParams := strings.NewReader(params.Encode())
-	request, err := http.NewRequest("POST", "https://example.com/token", postParams)
-	request.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-	assert.Nil(t, err)
+	params := makeTokenParameters()
+	params["grant_type"] = []string{"type2"}
+	request := testutil.NewEndpointRequest(t, "POST", "token", params)
+	request.SetBasicAuth("client_id", "client_secret")
+
+	response := &oauth2.AccessTokenResponse{
+		AccessToken: "access_token",
+		TokenType:   "Bearer",
+		ExpiresIn:   1200,
+	}
+	deps.grantTypes["type2"].On("ExtractParameters", request).Return(params)
+	deps.grantTypes["type2"].On(
+		"Execute",
+		&service.ClientCredentials{"client_id", "client_secret"},
+		params).Return(response, nil)
 
 	recorder := httptest.NewRecorder()
-	handler.ServeHTTP(recorder, request)
+	deps.handler.ServeHTTP(recorder, request)
 
-	assert.True(t, ctrlCalled, "Grant type password controller should be called")
+	assertResponseValid(t, response, recorder)
+	deps.grantTypes["type2"].Mock.AssertExpectations(t)
 }
 
-func TestClientCredentialsInFormDataAreInsertedIntoHeader(t *testing.T) {
-	tokenCtrl := func(w http.ResponseWriter, r *http.Request) {
-		authHeader := r.Header.Get("Authorization")
-		assert.NotEmpty(t, authHeader, "Authorization header should be set")
-	}
-	handler := endpoint.NewTokenEndpointHandler(http.HandlerFunc(tokenCtrl))
+func TestTokenEndpointResponseError(t *testing.T) {
+	deps := makeTokenDeps()
 
-	params := url.Values{}
-	params.Add("grant_type", "password")
-	params.Add("client_id", "client_id")
-	params.Add("client_secret", "client_secret")
-	postParams := strings.NewReader(params.Encode())
-	request, err := http.NewRequest("POST", "https://example.com/token", postParams)
-	request.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-	assert.Nil(t, err)
+	params := makeTokenParameters()
+	request := testutil.NewEndpointRequest(t, "POST", "token", params)
+	request.SetBasicAuth("client_id", "client_secret")
+
+	response := &oauth2.ErrorResponse{
+		ErrorCode:   "error_code",
+		Description: "description",
+	}
+	deps.grantTypes["type1"].On("ExtractParameters", request).Return(params)
+	deps.grantTypes["type1"].On(
+		"Execute",
+		&service.ClientCredentials{"client_id", "client_secret"},
+		params).Return(nil, response)
 
 	recorder := httptest.NewRecorder()
-	handler.ServeHTTP(recorder, request)
+	deps.handler.ServeHTTP(recorder, request)
 
-	assert.NotEqual(t, http.StatusBadRequest, recorder.Code, "Response should not be bad Request")
+	assertResponseError(t, response, recorder)
+	deps.grantTypes["type1"].Mock.AssertExpectations(t)
+}
+
+func TestTokenEndpointServiceError(t *testing.T) {
+	deps := makeTokenDeps()
+
+	params := makeTokenParameters()
+	request := testutil.NewEndpointRequest(t, "POST", "token", params)
+	request.SetBasicAuth("client_id", "client_secret")
+
+	deps.grantTypes["type1"].On("ExtractParameters", request).Return(params)
+	deps.grantTypes["type1"].On(
+		"Execute",
+		&service.ClientCredentials{"client_id", "client_secret"},
+		params).Return(nil, errors.New("error"))
+
+	recorder := httptest.NewRecorder()
+	deps.handler.ServeHTTP(recorder, request)
+
+	assert.Equal(t, http.StatusServiceUnavailable, recorder.Code)
+	deps.grantTypes["type1"].Mock.AssertExpectations(t)
+}
+
+func TestTokenEndpointClientCredentialsInFormDataAreInsertedIntoHeader(t *testing.T) {
+	deps := makeTokenDeps()
+
+	params := makeTokenParameters()
+	params.Add("client_id", "cid")
+	params.Add("client_secret", "csecret")
+	request := testutil.NewEndpointRequest(t, "POST", "token", params)
+	request.SetBasicAuth("client_id", "client_secret")
+
+	response := &oauth2.AccessTokenResponse{
+		AccessToken: "access_token",
+		TokenType:   "Bearer",
+		ExpiresIn:   1200,
+	}
+	deps.grantTypes["type1"].On("ExtractParameters", request).Return(params)
+	deps.grantTypes["type1"].On(
+		"Execute",
+		&service.ClientCredentials{"client_id", "client_secret"},
+		params).Return(response, nil)
+
+	recorder := httptest.NewRecorder()
+	deps.handler.ServeHTTP(recorder, request)
+
+	assertResponseValid(t, response, recorder)
+	deps.grantTypes["type1"].Mock.AssertExpectations(t)
 }
 
 func TestClientCredentialsInAuthHeaderHaveHigherPrioriy(t *testing.T) {
-	var authHeader string
-	tokenCtrl := func(w http.ResponseWriter, r *http.Request) {
-		authHeader = r.Header.Get("Authorization")
-	}
-	handler := endpoint.NewTokenEndpointHandler(http.HandlerFunc(tokenCtrl))
+	deps := makeTokenDeps()
 
-	params := url.Values{}
-	params.Add("grant_type", "password")
-	params.Add("client_id", "wrong_id")
-	params.Add("client_secret", "wrong_secret")
-	postParams := strings.NewReader(params.Encode())
-	request, err := http.NewRequest("POST", "https://example.com/token", postParams)
-	request.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-	request.SetBasicAuth("client_id", "client_secret")
-	assert.Nil(t, err)
+	params := makeTokenParameters()
+	params.Add("client_id", "cid")
+	params.Add("client_secret", "csecret")
+	request := testutil.NewEndpointRequest(t, "POST", "token", params)
+
+	response := &oauth2.AccessTokenResponse{
+		AccessToken: "access_token",
+		TokenType:   "Bearer",
+		ExpiresIn:   1200,
+	}
+	deps.grantTypes["type1"].On("ExtractParameters", request).Return(params)
+	deps.grantTypes["type1"].On(
+		"Execute",
+		&service.ClientCredentials{"cid", "csecret"},
+		params).Return(response, nil)
 
 	recorder := httptest.NewRecorder()
-	handler.ServeHTTP(recorder, request)
+	deps.handler.ServeHTTP(recorder, request)
 
-	assert.Equal(t, request.Header.Get("Authorization"), authHeader,
-		"Form data client credentials should not be in header")
+	assertResponseValid(t, response, recorder)
+	deps.grantTypes["type1"].Mock.AssertExpectations(t)
+}
+
+func TestClientCredentialsErrorOnMissingCredentials(t *testing.T) {
+	deps := makeTokenDeps()
+
+	request := testutil.NewEndpointRequest(t, "POST", "token", nil)
+
+	recorder := httptest.NewRecorder()
+	deps.handler.ServeHTTP(recorder, request)
+
+	assertMissingCredentialsError(t, recorder)
+}
+
+func assertResponseValid(
+	t *testing.T,
+	tokenResponse *oauth2.AccessTokenResponse,
+	recorder *httptest.ResponseRecorder) {
+
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	testutil.AssertContentTypeJson(t, recorder)
+
+	var jsonMap map[string]interface{}
+	json.Unmarshal(recorder.Body.Bytes(), &jsonMap)
+
+	assert.Equal(t, 3, len(jsonMap))
+	assert.Equal(t, tokenResponse.AccessToken, jsonMap["access_token"])
+	assert.Equal(t, tokenResponse.TokenType, jsonMap["token_type"])
+	assert.Equal(t, tokenResponse.ExpiresIn, jsonMap["expires_in"])
+}
+
+func assertResponseError(t *testing.T, errorResponse *oauth2.ErrorResponse, recorder *httptest.ResponseRecorder) {
+	assert.Equal(t, http.StatusBadRequest, recorder.Code)
+	testutil.AssertContentTypeJson(t, recorder)
+
+	var jsonMap map[string]interface{}
+	json.Unmarshal(recorder.Body.Bytes(), &jsonMap)
+
+	assert.Equal(t, 2, len(jsonMap))
+	assert.Equal(t, errorResponse.ErrorCode, jsonMap["error"])
+	assert.Equal(t, errorResponse.Description, jsonMap["error_description"])
+}
+
+func assertMissingCredentialsError(t *testing.T, recorder *httptest.ResponseRecorder) {
+	assert.Equal(t, http.StatusUnauthorized, recorder.Code)
+	testutil.AssertContentTypeJson(t, recorder)
+
+	var jsonMap map[string]interface{}
+	json.Unmarshal(recorder.Body.Bytes(), &jsonMap)
+
+	assert.Equal(t, 2, len(jsonMap))
+	assert.Equal(t, oauth2.ErrorInvalidClient, jsonMap["error"],
+		"Error code should be invalid client: %s", recorder.Body.String())
+	assert.NotEmpty(t, jsonMap["error_description"],
+		"Error description should not be empty: %s", recorder.Body.String())
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/arjantop/gopherauth/testutil"
 )
 
+//TODO remove
 func assertMissingParameter(t *testing.T, controller http.Handler, params url.Values, name string) {
 	params.Del(name)
 	request := testutil.NewEndpointRequest(t, "POST", "token", params)
