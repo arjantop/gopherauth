@@ -1,10 +1,7 @@
 package grant_type_test
 
 import (
-	"encoding/json"
 	"errors"
-	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"testing"
 
@@ -43,76 +40,48 @@ func makePasswordController() passwordDeps {
 	}
 }
 
-func TestPasswordFlowReturnsBearerToken(t *testing.T) {
+func TestPasswordParametersAreExtracted(t *testing.T) {
 	deps := makePasswordController()
-	clientCredentials := service.ClientCredentials{"client_id", "client_secret"}
-	tokenResponse := oauth2.AccessTokenResponse{"token", "bearer", 3600}
-	deps.oauth2Service.On("PasswordFlow", &clientCredentials, "user", "pass").Return(&tokenResponse, nil)
 
 	request := testutil.NewEndpointRequest(t, "POST", "token", deps.params)
-	request.SetBasicAuth("client_id", "client_secret")
-
-	recorder := httptest.NewRecorder()
-	deps.controller.ServeHTTP(recorder, request)
-
-	assertResponseValid(t, &tokenResponse, recorder)
+	params := deps.controller.ExtractParameters(request)
+	for paramName, _ := range deps.params {
+		assert.Equal(t, deps.params.Get(paramName), params.Get(paramName),
+			"Parameter: %s", paramName)
+	}
 }
 
-func TestPasswordFlowMissingParameterUsername(t *testing.T) {
+func TestPasswordResponseIsReturned(t *testing.T) {
 	deps := makePasswordController()
-	assertMissingParameter(t, deps.controller, deps.params, "username")
-}
 
-func TestPasswordFlowMissingParameterPassword(t *testing.T) {
-	deps := makePasswordController()
-	assertMissingParameter(t, deps.controller, deps.params, "password")
-}
+	clientCredentials := &service.ClientCredentials{"client_id", "client_secret"}
+	expectedResponse := &oauth2.AccessTokenResponse{}
 
-func TestPasswordFlowMissingClientCredentials(t *testing.T) {
-	deps := makePasswordController()
-	assertMissingCredentialsError(t, deps.controller, deps.params)
-}
-
-func TestOauthServiceResponseErrorIsReturned(t *testing.T) {
-	deps := makePasswordController()
-	clientCredentials := service.ClientCredentials{"client_id", "client_secret"}
-	errorResponse := oauth2.ErrorResponse{
-		oauth2.ErrorInvalidClient, "Invalid client", nil}
-	deps.oauth2Service.On("PasswordFlow", &clientCredentials, "user", "pass").Return(nil, &errorResponse)
-
-	request := testutil.NewEndpointRequest(t, "POST", "token", deps.params)
-	request.SetBasicAuth("client_id", "client_secret")
-
-	recorder := httptest.NewRecorder()
-	deps.controller.ServeHTTP(recorder, request)
-
-	assert.Equal(t, http.StatusBadRequest, recorder.Code)
-	testutil.AssertContentTypeJson(t, recorder)
-
-	var jsonMap map[string]interface{}
-	json.Unmarshal(recorder.Body.Bytes(), &jsonMap)
-
-	assert.Equal(t, 2, len(jsonMap))
-	assert.Equal(t, oauth2.ErrorInvalidClient, jsonMap["error"],
-		"Error should be invalid client", recorder.Body.String())
-	assert.NotEmpty(t, jsonMap["error_description"],
-		"Error description should not be empty", recorder.Body.String())
-}
-
-func TestPasswordOauthServiceErrorResultsInServiceUnavaliableError(t *testing.T) {
-	deps := makePasswordController()
-	clientCredentials := service.ClientCredentials{"client_id", "client_secret"}
-	errorResponse := errors.New("some error")
 	deps.oauth2Service.On(
-		"PasswordFlow",
-		&clientCredentials,
-		"user", "pass").Return(nil, errorResponse)
+		"Password",
+		clientCredentials,
+		"user",
+		"pass").Return(expectedResponse, nil)
 
-	request := testutil.NewEndpointRequest(t, "POST", "token", deps.params)
-	request.SetBasicAuth("client_id", "client_secret")
+	response, err := deps.controller.Execute(clientCredentials, deps.params)
 
-	recorder := httptest.NewRecorder()
-	deps.controller.ServeHTTP(recorder, request)
+	assert.Nil(t, err)
+	assert.Equal(t, expectedResponse, response)
+}
 
-	assert.Equal(t, http.StatusServiceUnavailable, recorder.Code)
+func TestPasswordServiceErrorIsReturned(t *testing.T) {
+	deps := makePasswordController()
+
+	clientCredentials := &service.ClientCredentials{"client_id", "client_secret"}
+
+	deps.oauth2Service.On(
+		"Password",
+		clientCredentials,
+		"user",
+		"pass").Return(nil, errors.New("error"))
+
+	response, err := deps.controller.Execute(clientCredentials, deps.params)
+
+	assert.Nil(t, response)
+	assert.Equal(t, errors.New("error"), err)
 }

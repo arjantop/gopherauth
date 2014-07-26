@@ -36,7 +36,7 @@ func (s *Oauth2ServiceMock) ValidateScope(scope []string) (*ScopeValidationResul
 	return tokenResponse, args.Error(1)
 }
 
-func (s *Oauth2ServiceMock) PasswordFlow(c *ClientCredentials, username, password string) (*oauth2.AccessTokenResponse, error) {
+func (s *Oauth2ServiceMock) Password(c *ClientCredentials, username, password string) (*oauth2.AccessTokenResponse, error) {
 	args := s.Mock.Called(c, username, password)
 	tokenResponse, _ := args.Get(0).(*oauth2.AccessTokenResponse)
 	return tokenResponse, args.Error(1)
@@ -51,9 +51,9 @@ func (s *Oauth2ServiceMock) Code(
 }
 
 func (s *Oauth2ServiceMock) AuthorizationCode(
-	c *ClientCredentials, code, redirect_uri string) (*oauth2.AccessTokenResponse, error) {
+	c *ClientCredentials, code string, redirectURI *url.URL) (*oauth2.AccessTokenResponse, error) {
 
-	args := s.Mock.Called(c, code, redirect_uri)
+	args := s.Mock.Called(c, code, redirectURI)
 	tokenResponse, _ := args.Get(0).(*oauth2.AccessTokenResponse)
 	return tokenResponse, args.Error(1)
 }

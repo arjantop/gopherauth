@@ -78,7 +78,6 @@ func (h *authEndpointHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 				return
 			}
 		}
-		params.Add(oauth2.ParameterResponseType, responseType)
 
 		scope := oauth2.ParseScope(params.Get(oauth2.ParameterScope))
 

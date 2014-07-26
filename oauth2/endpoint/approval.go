@@ -41,12 +41,9 @@ func (h *approvalEndpointHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	query := r.URL.Query()
-	responseType := query.Get(oauth2.ParameterResponseType)
+	params := r.URL.Query()
+	responseType := params.Get(oauth2.ParameterResponseType)
 	if handler, ok := h.handlers[responseType]; ok {
-		params := handler.ExtractParameters(r)
-		params.Add(oauth2.ParameterResponseType, responseType)
-
 		notAuthenticated := false
 
 		sessionId, err := r.Cookie("sessionid")

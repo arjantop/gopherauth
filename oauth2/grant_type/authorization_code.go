@@ -5,9 +5,7 @@ import (
 	"net/url"
 
 	"github.com/arjantop/gopherauth/oauth2"
-	"github.com/arjantop/gopherauth/oauth2/helpers"
 	"github.com/arjantop/gopherauth/service"
-	"github.com/arjantop/gopherauth/util"
 )
 
 type AuthorizationCodeController struct {
@@ -22,34 +20,28 @@ func NewAuthorizationCodeController(
 	}
 }
 
-func (c *AuthorizationCodeController) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	clientCredentials, err := util.GetBasicAuth(r)
-	if err != nil {
-		response := helpers.NewMissingClientCredentialsError()
-		response.WriteResponse(w, http.StatusUnauthorized)
-		return
-	}
-
+func (c *AuthorizationCodeController) ExtractParameters(r *http.Request) url.Values {
+	grantType := r.PostFormValue(oauth2.ParameterGrantType)
 	code := r.PostFormValue(oauth2.ParameterCode)
-	redirect_uri := r.PostFormValue(oauth2.ParameterRedirectUri)
+	redirectURI := r.PostFormValue(oauth2.ParameterRedirectUri)
 
 	params := url.Values{}
+	params.Add(oauth2.ParameterGrantType, grantType)
 	params.Add(oauth2.ParameterCode, code)
-	params.Add(oauth2.ParameterRedirectUri, redirect_uri)
+	params.Add(oauth2.ParameterRedirectUri, redirectURI)
 
-	valid := helpers.ValidateParameters(params, w)
-	if !valid {
-		return
-	}
+	return params
+}
 
-	response, err := c.oauth2Service.AuthorizationCode(clientCredentials, code, redirect_uri)
+func (c *AuthorizationCodeController) Execute(
+	clientCredentials *service.ClientCredentials,
+	params url.Values) (*oauth2.AccessTokenResponse, error) {
+
+	code := params.Get(oauth2.ParameterCode)
+	redirectURIString := params.Get(oauth2.ParameterRedirectUri)
+	redirectURI, err := url.Parse(redirectURIString)
 	if err != nil {
-		if response, ok := err.(*oauth2.ErrorResponse); ok {
-			response.WriteResponse(w, http.StatusBadRequest)
-		} else {
-			http.Error(w, "", http.StatusServiceUnavailable)
-		}
-		return
+		return nil, err
 	}
-	response.WriteResponse(w, http.StatusOK)
+	return c.oauth2Service.AuthorizationCode(clientCredentials, code, redirectURI)
 }

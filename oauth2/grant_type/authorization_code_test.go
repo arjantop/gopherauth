@@ -1,27 +1,23 @@
 package grant_type_test
 
 import (
-	"encoding/json"
 	"errors"
-	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 
 	"github.com/arjantop/gopherauth/oauth2"
 	"github.com/arjantop/gopherauth/oauth2/grant_type"
 	"github.com/arjantop/gopherauth/service"
 	"github.com/arjantop/gopherauth/testutil"
-	"github.com/stretchr/testify/assert"
 )
-
-const redirectUri = "https://domain.com/callback"
 
 func makeAuthCodeParameters() url.Values {
 	return map[string][]string{
 		"grant_type":   []string{"authentication_code"},
 		"code":         []string{"auth_code"},
-		"redirect_uri": []string{redirectUri},
+		"redirect_uri": []string{"https://domain.com/callback"},
 	}
 }
 
@@ -40,87 +36,50 @@ func makeAuthCodeController() authCodeDeps {
 	}
 }
 
-func TestAuthCodeMissingParemeterCode(t *testing.T) {
+func TestAuthCodeParametersAreExtracted(t *testing.T) {
 	deps := makeAuthCodeController()
-	assertMissingParameter(t, deps.controller, deps.params, "code")
-}
-
-func TestAuthCodeMissingParameterRedirectUri(t *testing.T) {
-	deps := makeAuthCodeController()
-	assertMissingParameter(t, deps.controller, deps.params, "redirect_uri")
-}
-
-func TestAuthCodeRespondsReturnsBearerToken(t *testing.T) {
-	deps := makeAuthCodeController()
-
-	clientCredentials := service.ClientCredentials{"client_id", "client_secret"}
-	tokenResponse := oauth2.AccessTokenResponse{"token", "bearer", 3600}
-	deps.oauth2Service.On(
-		"AuthorizationCode",
-		&clientCredentials,
-		"auth_code",
-		redirectUri).Return(&tokenResponse, nil)
 
 	request := testutil.NewEndpointRequest(t, "POST", "token", deps.params)
-	request.SetBasicAuth("client_id", "client_secret")
-
-	recorder := httptest.NewRecorder()
-	deps.controller.ServeHTTP(recorder, request)
-
-	assertResponseValid(t, &tokenResponse, recorder)
+	params := deps.controller.ExtractParameters(request)
+	for paramName, _ := range deps.params {
+		assert.Equal(t, deps.params.Get(paramName), params.Get(paramName),
+			"Parameter: %s", paramName)
+	}
 }
 
-func TestAuthTokenMissingClientCredentials(t *testing.T) {
-	deps := makeAuthCodeController()
-	assertMissingCredentialsError(t, deps.controller, deps.params)
-}
-
-func TestAuthCodeOauth2ServiceStandardErrorIsDisplayed(t *testing.T) {
+func TestAuthCodeResponseIsReturned(t *testing.T) {
 	deps := makeAuthCodeController()
 
-	clientCredentials := service.ClientCredentials{"client_id", "client_secret"}
-	errorResponse := oauth2.ErrorResponse{
-		oauth2.ErrorUnauthorizedClient, "Unauthorized client", nil}
+	clientCredentials := &service.ClientCredentials{"client_id", "client_secret"}
+	expectedResponse := &oauth2.AccessTokenResponse{}
+	uri, _ := url.Parse(deps.params.Get("redirect_uri"))
+
 	deps.oauth2Service.On(
 		"AuthorizationCode",
-		&clientCredentials,
-		"auth_code",
-		redirectUri).Return(nil, &errorResponse)
+		clientCredentials,
+		deps.params.Get("code"),
+		uri).Return(expectedResponse, nil)
 
-	request := testutil.NewEndpointRequest(t, "POST", "token", deps.params)
-	request.SetBasicAuth("client_id", "client_secret")
+	response, err := deps.controller.Execute(clientCredentials, deps.params)
 
-	recorder := httptest.NewRecorder()
-	deps.controller.ServeHTTP(recorder, request)
-
-	assert.Equal(t, http.StatusBadRequest, recorder.Code)
-	testutil.AssertContentTypeJson(t, recorder)
-
-	var jsonMap map[string]interface{}
-	json.Unmarshal(recorder.Body.Bytes(), &jsonMap)
-
-	assert.Equal(t, 2, len(jsonMap))
-	assert.Equal(t, oauth2.ErrorUnauthorizedClient, jsonMap["error"],
-		"Error should be unuthorized client", recorder.Body.String())
-	assert.NotEmpty(t, jsonMap["error_description"],
-		"Error description should not be empty", recorder.Body.String())
+	assert.Nil(t, err)
+	assert.Equal(t, expectedResponse, response)
 }
 
-func TestAuthCodeOauthServiceErrorResultsInServiceUnavaliableError(t *testing.T) {
+func TestAuthCodeServiceErrorIsReturned(t *testing.T) {
 	deps := makeAuthCodeController()
-	clientCredentials := service.ClientCredentials{"client_id", "client_secret"}
-	errorResponse := errors.New("error")
+
+	clientCredentials := &service.ClientCredentials{"client_id", "client_secret"}
+	uri, _ := url.Parse(deps.params.Get("redirect_uri"))
+
 	deps.oauth2Service.On(
 		"AuthorizationCode",
-		&clientCredentials,
-		"auth_code",
-		redirectUri).Return(nil, errorResponse)
+		clientCredentials,
+		deps.params.Get("code"),
+		uri).Return(nil, errors.New("error"))
 
-	request := testutil.NewEndpointRequest(t, "POST", "token", deps.params)
-	request.SetBasicAuth("client_id", "client_secret")
+	response, err := deps.controller.Execute(clientCredentials, deps.params)
 
-	recorder := httptest.NewRecorder()
-	deps.controller.ServeHTTP(recorder, request)
-
-	assert.Equal(t, http.StatusServiceUnavailable, recorder.Code)
+	assert.Nil(t, response)
+	assert.Equal(t, errors.New("error"), err)
 }

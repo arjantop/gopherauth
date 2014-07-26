@@ -5,9 +5,7 @@ import (
 	"net/url"
 
 	"github.com/arjantop/gopherauth/oauth2"
-	"github.com/arjantop/gopherauth/oauth2/helpers"
 	"github.com/arjantop/gopherauth/service"
-	"github.com/arjantop/gopherauth/util"
 )
 
 type PasswordController struct {
@@ -20,34 +18,25 @@ func NewPasswordController(oauth2Service service.Oauth2Service) *PasswordControl
 	}
 }
 
-func (c *PasswordController) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	clientCredentials, err := util.GetBasicAuth(r)
-	if err != nil {
-		response := helpers.NewMissingClientCredentialsError()
-		response.WriteResponse(w, http.StatusUnauthorized)
-		return
-	}
-
+func (c *PasswordController) ExtractParameters(r *http.Request) url.Values {
+	grantType := r.PostFormValue(oauth2.ParameterGrantType)
 	username := r.PostFormValue(oauth2.ParameterUsername)
 	password := r.PostFormValue(oauth2.ParameterPassword)
 
 	params := url.Values{}
+	params.Add(oauth2.ParameterGrantType, grantType)
 	params.Add(oauth2.ParameterUsername, username)
 	params.Add(oauth2.ParameterPassword, password)
 
-	valid := helpers.ValidateParameters(params, w)
-	if !valid {
-		return
-	}
+	return params
+}
 
-	response, err := c.oauth2Service.PasswordFlow(clientCredentials, username, password)
-	if err != nil {
-		if response, ok := err.(*oauth2.ErrorResponse); ok {
-			response.WriteResponse(w, http.StatusBadRequest)
-		} else {
-			http.Error(w, "", http.StatusServiceUnavailable)
-		}
-		return
-	}
-	response.WriteResponse(w, http.StatusOK)
+func (c *PasswordController) Execute(
+	clientCredentials *service.ClientCredentials,
+	params url.Values) (*oauth2.AccessTokenResponse, error) {
+
+	username := params.Get(oauth2.ParameterUsername)
+	password := params.Get(oauth2.ParameterPassword)
+
+	return c.oauth2Service.Password(clientCredentials, username, password)
 }

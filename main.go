@@ -8,6 +8,7 @@ import (
 	"github.com/arjantop/gopherauth/login"
 	"github.com/arjantop/gopherauth/oauth2"
 	"github.com/arjantop/gopherauth/oauth2/endpoint"
+	"github.com/arjantop/gopherauth/oauth2/grant_type"
 	"github.com/arjantop/gopherauth/oauth2/response_type"
 	"github.com/arjantop/gopherauth/service"
 	"github.com/arjantop/gopherauth/util"
@@ -42,7 +43,7 @@ func (s *Oauth2ServiceTest) ValidateScope(scope []string) (*service.ScopeValidat
 	return &result, nil
 }
 
-func (s *Oauth2ServiceTest) PasswordFlow(
+func (s *Oauth2ServiceTest) Password(
 	c *service.ClientCredentials,
 	username, password string) (*oauth2.AccessTokenResponse, error) {
 
@@ -65,7 +66,7 @@ func (s *Oauth2ServiceTest) Code(
 }
 
 func (s *Oauth2ServiceTest) AuthorizationCode(
-	c *service.ClientCredentials, code, redirect_uri string) (*oauth2.AccessTokenResponse, error) {
+	c *service.ClientCredentials, code string, redirectURI *url.URL) (*oauth2.AccessTokenResponse, error) {
 
 	response := oauth2.AccessTokenResponse{
 		AccessToken: "token",
@@ -88,6 +89,13 @@ func main() {
 	oauth2Service := &Oauth2ServiceTest{}
 
 	templateFactory := util.NewTemplateFactory("templates")
+
+	grantTypeHandlers := map[string]endpoint.GrantType{}
+	passwordHandler := grant_type.NewPasswordController(oauth2Service)
+	grantTypeHandlers[oauth2.GrantTypePassword] = passwordHandler
+	authCodeHandler := grant_type.NewAuthorizationCodeController(oauth2Service)
+	grantTypeHandlers[oauth2.GrantTypeAuthorizationCode] = authCodeHandler
+
 	http.Handle("/token", endpoint.NewTokenEndpointHandler(nil))
 
 	responseTypeHandlers := map[string]endpoint.ResponseType{}

@@ -107,8 +107,6 @@ func TestApprovalEndpointUnauthorizedErrorIfSessionCookieIsMissing(t *testing.T)
 	params.Add(oauth2.ParameterResponseType, "type1")
 	request := testutil.NewEndpointPostRequest(t, "approval", params, nil)
 
-	deps.responseTypes["type1"].On("ExtractParameters", request).Return(url.Values{})
-
 	recorder := httptest.NewRecorder()
 	deps.handler.ServeHTTP(recorder, request)
 
@@ -125,7 +123,6 @@ func TestApprovalEndpointStatusServiceUnavaliableOnSessionValidationError(t *tes
 	sessionIdCookie := &http.Cookie{Name: "sessionid", Value: "InvalidId"}
 	request.AddCookie(sessionIdCookie)
 
-	deps.responseTypes["type1"].On("ExtractParameters", request).Return(url.Values{})
 	deps.userAuthService.On("IsSessionValid", "InvalidId").Return(false, errors.New("error"))
 
 	recorder := httptest.NewRecorder()
@@ -145,10 +142,6 @@ func TestApprovalEndpointUnauthorizedErrorIfSessionIdIsInvalid(t *testing.T) {
 	sessionIdCookie := &http.Cookie{Name: "sessionid", Value: "InvalidId"}
 	request.AddCookie(sessionIdCookie)
 
-	extractedParams := url.Values{}
-	extractedParams.Add("param1", "value1")
-
-	deps.responseTypes["type1"].On("ExtractParameters", request).Return(extractedParams)
 	deps.userAuthService.On("IsSessionValid", "InvalidId").Return(false, nil)
 
 	recorder := httptest.NewRecorder()
@@ -190,32 +183,24 @@ func TestApprovalEndpointInvalidMacBadRequest(t *testing.T) {
 func TestApprovalAfterSuccessfulValidationUserIsRedirectedToRedirectUri(t *testing.T) {
 	deps := makeApprovalEndpointHandler()
 
-	params := url.Values{}
-	params.Add(oauth2.ParameterResponseType, "type1")
-	params.Add("param1", "value1")
-
 	expirationTimeValue := deps.approvalParams.Get(endpoint.ApprovalParameterExpirationTime)
 	expirationTime, err := strconv.ParseInt(expirationTimeValue, 10, 64)
 	assert.Nil(t, err)
 
 	key := endpoint.ComputeKey(expirationTime, "SessionId", deps.serverKey)
-	mac := endpoint.ComputeMAC(params, expirationTime, "SessionId", key)
+	mac := endpoint.ComputeMAC(deps.params, expirationTime, "SessionId", key)
 
 	deps.approvalParams.Set(endpoint.ApprovalParameterSignature, base64.StdEncoding.EncodeToString(mac))
 
-	request := testutil.NewEndpointPostRequest(t, "approval", params, deps.approvalParams)
+	request := testutil.NewEndpointPostRequest(t, "approval", deps.params, deps.approvalParams)
 	sessionIdCookie := &http.Cookie{Name: "sessionid", Value: "SessionId"}
 	request.AddCookie(sessionIdCookie)
 
-	extractedParams := url.Values{}
-	extractedParams.Add("param1", "value1")
-
 	const RedirectUri = "https://example.com/callback"
 
-	deps.responseTypes["type1"].On("ExtractParameters", request).Return(extractedParams)
 	uri, err := url.Parse(RedirectUri)
 	assert.Nil(t, err)
-	deps.responseTypes["type1"].On("Execute", extractedParams).Return(uri, nil)
+	deps.responseTypes["type1"].On("Execute", deps.params).Return(uri, nil)
 	deps.userAuthService.On("IsSessionValid", "SessionId").Return(true, nil)
 
 	recorder := httptest.NewRecorder()
@@ -237,7 +222,6 @@ func makeBadRequestTest(t *testing.T, modify func(url.Values) url.Values) {
 	sessionIdCookie := &http.Cookie{Name: "sessionid", Value: "SessionId"}
 	request.AddCookie(sessionIdCookie)
 
-	deps.responseTypes["type1"].On("ExtractParameters", request).Return(url.Values{})
 	deps.userAuthService.On("IsSessionValid", "SessionId").Return(true, nil)
 
 	recorder := httptest.NewRecorder()
