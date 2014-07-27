@@ -36,11 +36,8 @@ func (m *UserAuthenticationServiceTest) AuthenticateUser(user, password string) 
 type Oauth2ServiceTest struct {
 }
 
-func (s *Oauth2ServiceTest) ValidateScope(scope []string) (*service.ScopeValidationResult, error) {
-	result := service.ScopeValidationResult{
-		Valid: scope,
-	}
-	return &result, nil
+func (s *Oauth2ServiceTest) ValidateRequest(clientID, scope, redirectURI string) error {
+	return nil
 }
 
 func (s *Oauth2ServiceTest) Password(

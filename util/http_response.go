@@ -21,7 +21,13 @@ func HTTPErrorServiceUnavaliable() HTTPError {
 		StatusCode:  http.StatusServiceUnavailable,
 		Description: "The service you're looking for is temporarily unavaliable.",
 	}
+}
 
+func HTTPErrorInternalServerError() HTTPError {
+	return HTTPError{
+		StatusCode:  http.StatusInternalServerError,
+		Description: "The server encountered an error and could not complete your request",
+	}
 }
 
 func RenderHTTPError(w http.ResponseWriter, tf *TemplateFactory, he HTTPError) {

@@ -11,17 +11,14 @@ type ClientCredentials struct {
 	Secret string
 }
 
-type ScopeValidationResult struct {
-	Valid   []string
-	Invalid []string
-}
+type ScopeInvalid struct{}
 
-func (s *ScopeValidationResult) IsValid() bool {
-	return len(s.Invalid) == 0
+func (e *ScopeInvalid) Error() string {
+	return "scope invalid"
 }
 
 type Oauth2Service interface {
-	ValidateScope(scope []string) (*ScopeValidationResult, error)
+	ValidateRequest(clientID, scope, redirectURI string) error
 
 	Password(c *ClientCredentials, username, password string) (*oauth2.AccessTokenResponse, error)
 

@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
+	"github.com/arjantop/gopherauth/oauth2"
 	"github.com/arjantop/gopherauth/oauth2/endpoint"
 	"github.com/arjantop/gopherauth/service"
 	"github.com/arjantop/gopherauth/testutil"
@@ -21,6 +22,7 @@ const (
 	contentTypeHtml = "text/html; charset=utf-8"
 	templateRoot    = "../../templates"
 	LoginUrl        = "https://example.com/login"
+	clientURI       = "https://client.example.com/cb"
 )
 
 func makeLoginUrl() *url.URL {
@@ -52,6 +54,7 @@ func NewResponseTypeMock() *ResponseTypeMock {
 }
 
 type authDeps struct {
+	params          url.Values
 	responseTypes   map[string]*ResponseTypeMock
 	handler         http.Handler
 	oauth2Service   *service.Oauth2ServiceMock
@@ -60,6 +63,12 @@ type authDeps struct {
 }
 
 func makeAuthEndpointHandler() authDeps {
+	params := url.Values{}
+	params.Add("response_type", "type1")
+	params.Add("client_id", "client_id")
+	params.Add("scope", "scope1 scope2")
+	params.Add("redirect_uri", clientURI)
+
 	type1 := NewResponseTypeMock()
 	type2 := NewResponseTypeMock()
 	responseTypes := map[string]*ResponseTypeMock{
@@ -79,6 +88,7 @@ func makeAuthEndpointHandler() authDeps {
 			"type2": type2,
 		})
 	return authDeps{
+		params:          params,
 		responseTypes:   responseTypes,
 		handler:         handler,
 		oauth2Service:   oauth2Service,
@@ -111,7 +121,7 @@ func TestAuthEndpointCorrectResponseTypeControllerIsUsedForParameterParsing(t *t
 		params.Add("response_type", responseType)
 		request := testutil.NewEndpointRequest(t, "GET", "auth", params)
 		handler.On("ExtractParameters", request).Return(params)
-		deps.oauth2Service.On("ValidateScope", []string{}).Return(&service.ScopeValidationResult{}, nil)
+		deps.oauth2Service.On("ValidateRequest", "", "", "").Return(errors.New("error"))
 
 		recorder := httptest.NewRecorder()
 		deps.handler.ServeHTTP(recorder, request)
@@ -167,7 +177,7 @@ func TestErrorIsDisplayedIfResponseTypeIsMissing(t *testing.T) {
 	assert.Contains(t, recorder.Body.String(), "response_type")
 }
 
-func TestErrorIsDisaplyedIfOauth2ServiceErrorOccurs(t *testing.T) {
+func TestErrorIsDisaplayedIfOauth2ServiceErrorOccurs(t *testing.T) {
 	deps := makeAuthEndpointHandler()
 
 	params := url.Values{}
@@ -175,33 +185,31 @@ func TestErrorIsDisaplyedIfOauth2ServiceErrorOccurs(t *testing.T) {
 	request := testutil.NewEndpointRequest(t, "GET", "auth", params)
 
 	deps.responseTypes["type1"].On("ExtractParameters", request).Return(params)
-	deps.oauth2Service.On("ValidateScope", []string{}).Return(nil, errors.New("error"))
+	deps.oauth2Service.On("ValidateRequest", "", "", "").Return(errors.New("error"))
 
 	recorder := httptest.NewRecorder()
 	deps.handler.ServeHTTP(recorder, request)
 
-	assert.Equal(t, http.StatusServiceUnavailable, recorder.Code)
+	assert.Equal(t, http.StatusInternalServerError, recorder.Code)
 
 	assertAuthEndpointExpectations(t, deps)
 }
 
-func TestErrorisDisplayedIfScomeScopesAreInvalid(t *testing.T) {
+func TestErrorisDisplayedIfRequestValidationFails(t *testing.T) {
 	deps := makeAuthEndpointHandler()
 
-	params := url.Values{}
-	params.Add("response_type", "type2")
-	params.Add("scope", "scope1 scope2")
-	request := testutil.NewEndpointRequest(t, "GET", "auth", params)
+	request := testutil.NewEndpointRequest(t, "GET", "auth", deps.params)
 
-	deps.responseTypes["type2"].On("ExtractParameters", request).Return(params)
-	deps.oauth2Service.On("ValidateScope", []string{"scope1", "scope2"}).Return(
-		&service.ScopeValidationResult{Valid: []string{"scope2"}, Invalid: []string{"scope1"}}, nil)
+	deps.responseTypes["type1"].On("ExtractParameters", request).Return(deps.params)
+	deps.oauth2Service.On(
+		"ValidateRequest", "client_id", "scope1 scope2", clientURI).Return(&oauth2.ErrorResponse{
+		ErrorCode: oauth2.ErrorInvalidScope,
+	})
 
 	recorder := httptest.NewRecorder()
 	deps.handler.ServeHTTP(recorder, request)
 
 	assertIsBadRequest(t, recorder)
-	//TODO display invalid scopes
 	assert.Contains(t, recorder.Body.String(), "invalid_scope")
 
 	assertAuthEndpointExpectations(t, deps)
@@ -210,12 +218,11 @@ func TestErrorisDisplayedIfScomeScopesAreInvalid(t *testing.T) {
 func TestUserIsRedirectedToLoginIfSessionCookieIsNotFound(t *testing.T) {
 	deps := makeAuthEndpointHandler()
 
-	params := url.Values{}
-	params.Add("response_type", "type2")
-	request := testutil.NewEndpointRequest(t, "GET", "auth", params)
+	request := testutil.NewEndpointRequest(t, "GET", "auth", deps.params)
 
-	deps.responseTypes["type2"].On("ExtractParameters", request).Return(params)
-	deps.oauth2Service.On("ValidateScope", []string{}).Return(&service.ScopeValidationResult{}, nil)
+	deps.responseTypes["type1"].On("ExtractParameters", request).Return(deps.params)
+	deps.oauth2Service.On(
+		"ValidateRequest", "client_id", "scope1 scope2", clientURI).Return(nil)
 
 	recorder := httptest.NewRecorder()
 	deps.handler.ServeHTTP(recorder, request)
@@ -227,14 +234,13 @@ func TestUserIsRedirectedToLoginIfSessionCookieIsNotFound(t *testing.T) {
 func TestUserIsRedirectedToLoginIfSessionValueIsInvalid(t *testing.T) {
 	deps := makeAuthEndpointHandler()
 
-	params := url.Values{}
-	params.Add("response_type", "type2")
-	request := testutil.NewEndpointRequest(t, "GET", "auth", params)
+	request := testutil.NewEndpointRequest(t, "GET", "auth", deps.params)
 	sessionIdCookie := &http.Cookie{Name: "sessionid", Value: "invalid_id"}
 	request.AddCookie(sessionIdCookie)
 
-	deps.responseTypes["type2"].On("ExtractParameters", request).Return(params)
-	deps.oauth2Service.On("ValidateScope", []string{}).Return(&service.ScopeValidationResult{}, nil)
+	deps.responseTypes["type1"].On("ExtractParameters", request).Return(deps.params)
+	deps.oauth2Service.On(
+		"ValidateRequest", "client_id", "scope1 scope2", clientURI).Return(nil)
 	deps.userAuthService.On("IsSessionValid", "invalid_id").Return(false, nil)
 
 	recorder := httptest.NewRecorder()
@@ -247,14 +253,13 @@ func TestUserIsRedirectedToLoginIfSessionValueIsInvalid(t *testing.T) {
 func TestErrorIsDisaplyedIfUserAuthServiceErrorOccurs(t *testing.T) {
 	deps := makeAuthEndpointHandler()
 
-	params := url.Values{}
-	params.Add("response_type", "type1")
-	request := testutil.NewEndpointRequest(t, "GET", "auth", params)
+	request := testutil.NewEndpointRequest(t, "GET", "auth", deps.params)
 	sessionIdCookie := &http.Cookie{Name: "sessionid", Value: "valid_id"}
 	request.AddCookie(sessionIdCookie)
 
-	deps.responseTypes["type1"].On("ExtractParameters", request).Return(params)
-	deps.oauth2Service.On("ValidateScope", []string{}).Return(&service.ScopeValidationResult{}, nil)
+	deps.responseTypes["type1"].On("ExtractParameters", request).Return(deps.params)
+	deps.oauth2Service.On(
+		"ValidateRequest", "client_id", "scope1 scope2", clientURI).Return(nil)
 	deps.userAuthService.On("IsSessionValid", "valid_id").Return(false, errors.New("error"))
 
 	recorder := httptest.NewRecorder()
@@ -267,14 +272,13 @@ func TestErrorIsDisaplyedIfUserAuthServiceErrorOccurs(t *testing.T) {
 func TestAuthenticatedUserIsPresentedWithApprovalPrompt(t *testing.T) {
 	deps := makeAuthEndpointHandler()
 
-	params := url.Values{}
-	params.Add("response_type", "type2")
-	request := testutil.NewEndpointRequest(t, "GET", "auth", params)
+	request := testutil.NewEndpointRequest(t, "GET", "auth", deps.params)
 	sessionIdCookie := &http.Cookie{Name: "sessionid", Value: "valid_id"}
 	request.AddCookie(sessionIdCookie)
 
-	deps.responseTypes["type2"].On("ExtractParameters", request).Return(params)
-	deps.oauth2Service.On("ValidateScope", []string{}).Return(&service.ScopeValidationResult{}, nil)
+	deps.responseTypes["type1"].On("ExtractParameters", request).Return(deps.params)
+	deps.oauth2Service.On(
+		"ValidateRequest", "client_id", "scope1 scope2", clientURI).Return(nil)
 	deps.userAuthService.On("IsSessionValid", "valid_id").Return(true, nil)
 
 	recorder := httptest.NewRecorder()

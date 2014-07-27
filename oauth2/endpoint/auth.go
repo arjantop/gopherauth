@@ -71,48 +71,33 @@ func (h *authEndpointHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 	if handler, ok := h.handlers[responseType]; ok {
 		params := handler.ExtractParameters(r)
-		for param, val := range params {
-			if val[0] == "" {
-				response := helpers.NewMissingParameterError(param, nil)
+		valid := h.validateParameters(w, params)
+		if !valid {
+			return
+		}
+
+		err := h.oauth2Service.ValidateRequest(
+			params.Get(oauth2.ParameterClientId),
+			params.Get(oauth2.ParameterScope),
+			params.Get(oauth2.ParameterRedirectUri))
+		if err != nil {
+			if response, ok := err.(*oauth2.ErrorResponse); ok {
 				helpers.RenderError(w, h.templateFactory, response)
-				return
+			} else {
+				util.RenderHTTPError(w, h.templateFactory, util.HTTPErrorInternalServerError())
 			}
-		}
-
-		scope := oauth2.ParseScope(params.Get(oauth2.ParameterScope))
-
-		validationResult, err := h.oauth2Service.ValidateScope(scope)
-		if err != nil {
-			util.RenderHTTPError(w, h.templateFactory, util.HTTPErrorServiceUnavaliable())
-			return
-		}
-		if !validationResult.IsValid() {
-			response := &oauth2.ErrorResponse{
-				ErrorCode:   oauth2.ErrorInvalidScope,
-				Description: "Some requested scopes were invalid",
-				Uri:         nil,
-			}
-			helpers.RenderError(w, h.templateFactory, response)
 			return
 		}
 
-		sessionId, err := r.Cookie("sessionid")
-		if err != nil {
-			util.RedirectToLogin(w, r, *h.loginUrl, r.URL)
+		sessionId := h.checkUserLogin(w, r)
+		if sessionId == "" {
 			return
 		}
-		isAuthenticated, err := h.userAuthService.IsSessionValid(sessionId.Value)
-		if err != nil {
-			util.RenderHTTPError(w, h.templateFactory, util.HTTPErrorServiceUnavaliable())
-			return
-		}
-		if !isAuthenticated {
-			util.RedirectToLogin(w, r, *h.loginUrl, r.URL)
-			return
-		}
+
 		expirationTime := time.Now().Add(expiresIn).UnixNano()
-		userKey := ComputeKey(expirationTime, sessionId.Value, h.serverKey)
-		sig := ComputeMAC(params, expirationTime, sessionId.Value, userKey)
+		userKey := ComputeKey(expirationTime, sessionId, h.serverKey)
+		sig := ComputeMAC(params, expirationTime, sessionId, userKey)
+
 		data := ApprovalPrompt{
 			Scopes:         []*Scope{&Scope{Description: "Scope description"}},
 			ExpirationTime: expirationTime,
@@ -123,15 +108,48 @@ func (h *authEndpointHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		// TODO: Finish implementing approval prompt
 		h.templateFactory.ExecuteTemplate(w, "approval_prompt", &data)
 	} else {
-		var description string
-		if responseType == "" {
-			description = fmt.Sprintf("Required parameter is missing: %s", oauth2.ParameterResponseType)
-		} else {
-			description = fmt.Sprintf("Invalid response_type: %s", responseType)
-		}
-		helpers.RenderError(w, h.templateFactory, &oauth2.ErrorResponse{
-			ErrorCode:   oauth2.ErrorInvalidRequest,
-			Description: description,
-			Uri:         nil})
+		h.missingResponseType(w, responseType)
 	}
+}
+
+func (h *authEndpointHandler) validateParameters(w http.ResponseWriter, params url.Values) bool {
+	for param, val := range params {
+		if val[0] == "" {
+			response := helpers.NewMissingParameterError(param, nil)
+			helpers.RenderError(w, h.templateFactory, response)
+			return false
+		}
+	}
+	return true
+}
+
+func (h *authEndpointHandler) checkUserLogin(w http.ResponseWriter, r *http.Request) string {
+	sessionId, err := r.Cookie("sessionid")
+	if err != nil {
+		util.RedirectToLogin(w, r, *h.loginUrl, r.URL)
+		return ""
+	}
+	isAuthenticated, err := h.userAuthService.IsSessionValid(sessionId.Value)
+	if err != nil {
+		util.RenderHTTPError(w, h.templateFactory, util.HTTPErrorServiceUnavaliable())
+		return ""
+	}
+	if !isAuthenticated {
+		util.RedirectToLogin(w, r, *h.loginUrl, r.URL)
+		return ""
+	}
+	return sessionId.Value
+}
+
+func (h *authEndpointHandler) missingResponseType(w http.ResponseWriter, responseType string) {
+	var description string
+	if responseType == "" {
+		description = fmt.Sprintf("Required parameter is missing: %s", oauth2.ParameterResponseType)
+	} else {
+		description = fmt.Sprintf("Invalid response_type: %s", responseType)
+	}
+	helpers.RenderError(w, h.templateFactory, &oauth2.ErrorResponse{
+		ErrorCode:   oauth2.ErrorInvalidRequest,
+		Description: description,
+		Uri:         nil})
 }

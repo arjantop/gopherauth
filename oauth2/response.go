@@ -15,7 +15,7 @@ const (
 	ErrorServerError             = "server_error"
 	ErrorTemporarilyUnavaliable  = "temporarily_unavailable"
 	ErrorUnsupportedGrantType    = "unsupported_grant_type"
-	ErrorInvalidClient           = "error_invalid_client"
+	ErrorInvalidClient           = "invalid_client"
 )
 
 type AuthorizationResponse struct {

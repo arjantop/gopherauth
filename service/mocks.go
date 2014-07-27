@@ -30,10 +30,9 @@ type Oauth2ServiceMock struct {
 	mock.Mock
 }
 
-func (s *Oauth2ServiceMock) ValidateScope(scope []string) (*ScopeValidationResult, error) {
-	args := s.Mock.Called(scope)
-	tokenResponse, _ := args.Get(0).(*ScopeValidationResult)
-	return tokenResponse, args.Error(1)
+func (s *Oauth2ServiceMock) ValidateRequest(clientID, scope, redirectURI string) error {
+	args := s.Mock.Called(clientID, scope, redirectURI)
+	return args.Error(0)
 }
 
 func (s *Oauth2ServiceMock) Password(c *ClientCredentials, username, password string) (*oauth2.AccessTokenResponse, error) {
