@@ -1,21 +1,79 @@
 <!DOCTYPE html>
-<html>
-    <head></head>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="initial-scale=1">
+        <title>Approval</title>
+
+        <link href='http://fonts.googleapis.com/css?family=Open+Sans' rel='stylesheet' type='text/css'>
+        <style type="text/css">
+            @viewport {
+                zoom: 1.0;
+                width: device-width;
+            }
+
+            body {
+                margin: 0;
+                font-size: 16px;
+                font-family: 'Open Sans', sans-serif;
+            }
+
+            .submit-button {
+                text-align: center;
+                margin: 0;
+                height: 3em;
+                background-color: #eaeaea;
+                color: #222;
+                padding: 0.3em 1em;
+                border: 1px #bababa solid;
+            }
+
+            .approve {
+                background-color: #cacaca;
+            }
+
+            #approval-card {
+                padding: 40px;
+                margin: 0 auto;
+                max-width: 400px;
+                min-width: 320px;
+                box-sizing: border-box;
+            }
+
+            #scope-list .scope {
+                font-size: 0.9em;
+                padding: 0.5em;
+            }
+
+            #approval-card form {
+                display: flex;
+                justify-content: flex-end;
+                margin-top: 40px;
+            }
+
+            #approval-card form input[type="submit"] {
+                margin-left: 10px;
+            }
+        </style>
+    </head>
     <body>
-        <div id="scope-list">
-            <ul>
-                {{range .Scopes}}
-                <li class="scope">
-                    <span class="scope-description">{{.Description}}</span>
-                </li>
-                {{end}}
-            </ul>
+        <div id="approval-card">
+            <span>Application wants to:</span>
+            <div id="scope-list">
+                <ul>
+                    {{range .Scopes}}
+                    <li class="scope">
+                        <span class="scope-description">{{.Description}}</span>
+                    </li>
+                    {{end}}
+                </ul>
+            </div>
+            <form method="POST" action="/approval?{{.Parameters}}">
+                <input name="expiration_time" type="hidden" value="{{.ExpirationTime}}">
+                <input name="signature" type="hidden" value="{{.Signature}}">
+                <input name="cancel" type="submit" class="submit-button" value="Cancel">
+                <input name="accept" type="submit" class="submit-button approve" value="Accept">
+            </form>
         </div>
-        <form method="POST" action="/approval?{{.Parameters}}">
-            <input name="expiration_time" type="hidden" value="{{.ExpirationTime}}">
-            <input name="signature" type="hidden" value="{{.Signature}}">
-            <input name="cancel" type="submit" value="Cancel">
-            <input name="accept" type="submit" value="Accept">
-        </form>
     </body>
 </html>

@@ -21,7 +21,7 @@ type Scope struct {
 }
 
 type ApprovalPrompt struct {
-	Scopes         []*Scope
+	Scopes         []*service.ScopeInfo
 	ExpirationTime int64
 	Signature      string
 	Parameters     template.URL
@@ -76,9 +76,11 @@ func (h *authEndpointHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 
+		scope := params.Get(oauth2.ParameterScope)
+
 		err := h.oauth2Service.ValidateRequest(
 			params.Get(oauth2.ParameterClientId),
-			params.Get(oauth2.ParameterScope),
+			scope,
 			params.Get(oauth2.ParameterRedirectUri))
 		if err != nil {
 			if response, ok := err.(*oauth2.ErrorResponse); ok {
@@ -98,14 +100,16 @@ func (h *authEndpointHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		userKey := ComputeKey(expirationTime, sessionId, h.serverKey)
 		sig := ComputeMAC(params, expirationTime, sessionId, userKey)
 
+		// TODO handle error
+		scopeInfo, _ := h.oauth2Service.ScopeInfo(scope, "en")
+
 		data := ApprovalPrompt{
-			Scopes:         []*Scope{&Scope{Description: "Scope description"}},
+			Scopes:         scopeInfo,
 			ExpirationTime: expirationTime,
 			Signature:      base64.StdEncoding.EncodeToString(sig),
 			Parameters:     template.URL(params.Encode()),
 		}
 		w.Header().Add("Content-Type", "text/html; charset=utf-8")
-		// TODO: Finish implementing approval prompt
 		h.templateFactory.ExecuteTemplate(w, "approval_prompt", &data)
 	} else {
 		h.missingResponseType(w, responseType)

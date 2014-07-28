@@ -11,10 +11,10 @@ type ClientCredentials struct {
 	Secret string
 }
 
-type ScopeInvalid struct{}
-
-func (e *ScopeInvalid) Error() string {
-	return "scope invalid"
+type ScopeInfo struct {
+	Description string
+	MoreInfo    string
+	MoreURI     *url.URL
 }
 
 type Oauth2Service interface {
@@ -25,4 +25,6 @@ type Oauth2Service interface {
 	Code(clientId string, redirectURI *url.URL, scope, state string) (*oauth2.AuthorizationResponse, error)
 
 	AuthorizationCode(c *ClientCredentials, code string, redirectURI *url.URL) (*oauth2.AccessTokenResponse, error)
+
+	ScopeInfo(scope, locale string) ([]*ScopeInfo, error)
 }

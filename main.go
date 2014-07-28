@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 
@@ -71,6 +72,16 @@ func (s *Oauth2ServiceTest) AuthorizationCode(
 		ExpiresIn:   1000,
 	}
 	return &response, nil
+}
+
+func (s *Oauth2ServiceTest) ScopeInfo(scope, locale string) ([]*service.ScopeInfo, error) {
+	scopeInfo := make([]*service.ScopeInfo, 0)
+	for _, scope := range oauth2.ParseScope(scope) {
+		scopeInfo = append(scopeInfo, &service.ScopeInfo{
+			Description: fmt.Sprintf("Description of %s", scope),
+		})
+	}
+	return scopeInfo, nil
 }
 
 func main() {

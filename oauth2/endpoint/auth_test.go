@@ -278,15 +278,31 @@ func TestAuthenticatedUserIsPresentedWithApprovalPrompt(t *testing.T) {
 
 	deps.responseTypes["type1"].On("ExtractParameters", request).Return(deps.params)
 	deps.oauth2Service.On(
-		"ValidateRequest", "client_id", "scope1 scope2", clientURI).Return(nil)
+		"ValidateRequest", "client_id", deps.params.Get("scope"), clientURI).Return(nil)
 	deps.userAuthService.On("IsSessionValid", "valid_id").Return(true, nil)
+	scopeInfo := []*service.ScopeInfo{
+		&service.ScopeInfo{
+			Description: "Description of scope1",
+			MoreInfo:    "More info on scope1",
+		},
+		&service.ScopeInfo{
+			Description: "Description of scope2",
+			MoreInfo:    "More info on scope2",
+		},
+	}
+	deps.oauth2Service.On(
+		"ScopeInfo", deps.params.Get("scope"), "en").Return(scopeInfo, nil)
 
 	recorder := httptest.NewRecorder()
 	deps.handler.ServeHTTP(recorder, request)
 
-	//TODO incomplete implementation
 	assert.Equal(t, http.StatusOK, recorder.Code, "Response code should be 200 OK")
 	assert.Equal(t, contentTypeHtml, recorder.Header().Get("Content-Type"), "Response type should be html")
+
+	for _, scope := range []string{"scope1", "scope2"} {
+		assert.Contains(t, recorder.Body.String(), fmt.Sprintf("Description of %s", scope))
+	}
+
 	assertAuthEndpointExpectations(t, deps)
 }
 

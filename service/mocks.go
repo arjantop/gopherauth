@@ -57,6 +57,12 @@ func (s *Oauth2ServiceMock) AuthorizationCode(
 	return tokenResponse, args.Error(1)
 }
 
+func (s *Oauth2ServiceMock) ScopeInfo(scope, locale string) ([]*ScopeInfo, error) {
+	args := s.Mock.Called(scope, locale)
+	scopeInfo, _ := args.Get(0).([]*ScopeInfo)
+	return scopeInfo, args.Error(1)
+}
+
 func NewOauth2ServiceMock() *Oauth2ServiceMock {
 	return &Oauth2ServiceMock{}
 }
